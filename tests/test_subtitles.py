@@ -1,5 +1,5 @@
 from autoclip.config import SubtitlesConfig
-from autoclip.subtitles import Word, build_ass, group_words
+from autoclip.subtitles import Word, build_ass, group_words, join_elisions
 
 
 WORDS = [Word(0.0, 0.3, "Non"), Word(0.3, 0.6, "mais"), Word(0.6, 0.9, "attends"),
@@ -19,3 +19,19 @@ def test_ass_has_one_event_per_word_and_highlight():
     assert "\\c&H00E5FF&" in events[0] and "NON" in events[0]
     assert "{INCROYABLE}" not in ass  # accolades neutralisées
     assert events[0].split(",")[1] == "0:00:00.00"
+
+
+def test_french_elisions_are_glued():
+    # Découpage réel renvoyé par Whisper sur un live : « c » + « 'est », « peut » + « -être ».
+    words = join_elisions([Word(0.0, 0.1, "c"), Word(0.1, 0.3, "'est"),
+                           Word(0.3, 0.5, "peut"), Word(0.5, 0.8, "-être")])
+    assert [(w.text, w.start, w.end) for w in words] == [("c'est", 0.0, 0.3), ("peut-être", 0.3, 0.8)]
+
+
+def test_groups_never_overlap():
+    # « là » finit tôt : sa durée minimale (0,25 s) ne doit pas déborder sur la ligne suivante.
+    words = [Word(0.0, 0.36, "Oh"), Word(0.36, 0.74, "bah"), Word(0.74, 0.80, "là."),
+             Word(0.82, 0.92, "c'est"), Word(0.94, 1.19, "numéro")]
+    ass = build_ass(words, SubtitlesConfig())
+    events = [l.split(",") for l in ass.splitlines() if l.startswith("Dialogue:")]
+    assert events[2][2] == "0:00:00.82" and events[3][1] == "0:00:00.82"

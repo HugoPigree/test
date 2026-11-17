@@ -63,7 +63,19 @@ def transcribe(wav: Path, cfg: SubtitlesConfig) -> list[Word]:
             text = w.word.strip()
             if text:
                 words.append(Word(float(w.start), float(w.end), text))
-    return words
+    return join_elisions(words)
+
+
+def join_elisions(words: list[Word]) -> list[Word]:
+    """Whisper coupe « c'est » en « c » + « 'est » (et « peut » + « -être ») : on recolle."""
+    out: list[Word] = []
+    for w in words:
+        if out and w.text[0] in "'’-":
+            prev = out[-1]
+            out[-1] = Word(prev.start, w.end, prev.text + w.text)
+        else:
+            out.append(w)
+    return out
 
 
 def group_words(words: list[Word], per_line: int, max_chars: int) -> list[list[Word]]:
@@ -114,13 +126,17 @@ Style: Default,{cfg.font},{cfg.font_size},{cfg.color},{cfg.highlight_color},{cfg
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines = []
-    for group in group_words(words, cfg.words_per_line, cfg.max_chars):
+    groups = group_words(words, cfg.words_per_line, cfg.max_chars)
+    for g, group in enumerate(groups):
         texts = [(w.text.upper() if cfg.uppercase else w.text) for w in group]
         group_end = group[-1].end
+        next_start = groups[g + 1][0].start if g + 1 < len(groups) else None
         for i, w in enumerate(group):
             # Chaque mot reste en surbrillance jusqu'au début du suivant.
             start = w.start
             end = group[i + 1].start if i + 1 < len(group) else max(group_end, w.start + 0.25)
+            if next_start is not None:
+                end = min(end, next_start)  # sinon deux lignes s'empilent un instant
             if end <= start:
                 end = start + 0.05
             parts = []
