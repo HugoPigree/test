@@ -35,3 +35,13 @@ def test_groups_never_overlap():
     ass = build_ass(words, SubtitlesConfig())
     events = [l.split(",") for l in ass.splitlines() if l.startswith("Dialogue:")]
     assert events[2][2] == "0:00:00.82" and events[3][1] == "0:00:00.82"
+
+
+def test_zero_length_words_do_not_overlap():
+    # Cas réel : Whisper répète « Alba Fuchs. » avec des mots de durée nulle.
+    words = [Word(1.98, 2.18, "Alba"), Word(2.18, 2.18, "Fuchs."),
+             Word(2.18, 2.18, "Alba"), Word(2.18, 2.42, "Fuchs.")]
+    ass = build_ass(words, SubtitlesConfig())
+    times = [l.split(",")[1:3] for l in ass.splitlines() if l.startswith("Dialogue:")]
+    assert all(start < end for start, end in times)
+    assert all(times[k][1] <= times[k + 1][0] for k in range(len(times) - 1))

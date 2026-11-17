@@ -138,7 +138,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if next_start is not None:
                 end = min(end, next_start)  # sinon deux lignes s'empilent un instant
             if end <= start:
-                end = start + 0.05
+                continue  # mot de durée nulle (Whisper tasse les répétitions) : rien à afficher
             parts = []
             for j, t in enumerate(texts):
                 t = _escape(t)
