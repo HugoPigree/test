@@ -1,0 +1,9 @@
+__pycache__/
+*.egg-info/
+.venv/
+venv/
+config.toml
+.tiktok_token.json
+recordings/
+ready_to_post/
+*.log

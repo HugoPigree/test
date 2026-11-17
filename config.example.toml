@@ -1,0 +1,63 @@
+# Copie ce fichier en config.toml et adapte. Toutes les clés sont optionnelles.
+
+[twitch]
+channel = "jltomy"
+quality = "1080p60,1080p,720p60,720p,best"
+# Token OAuth d'un compte sub/Turbo (cookie "auth-token" de twitch.tv) => pas de pubs,
+# donc pas de trous dans l'enregistrement. Peut aussi venir de TWITCH_OAUTH_TOKEN.
+oauth_token = ""
+poll_interval = 60
+
+[paths]
+recordings = "recordings"
+export = "ready_to_post"
+
+[detection]
+window = 10.0           # fenêtre d'activité (s)
+baseline_window = 300.0 # ligne de base (s)
+threshold = 3.5         # baisse => plus de clips, monte => seulement les gros moments
+min_activity = 15.0
+min_gap = 90.0
+max_clips = 12
+pre_roll = 20.0         # secondes gardées avant la réaction du chat
+post_roll = 6.0
+min_duration = 15.0
+max_duration = 60.0
+chat_offset = 0.0       # si les clips coupent trop tôt/tard : ajuste (+ = chat en retard)
+keyword_weight = 1.5
+# keywords = ["mdr", "ptdr", "kekw", ...]  # remplace la liste par défaut
+
+[vertical]
+layout = "blur"         # "blur" | "crop" | "split"
+blur_zoom = 1.15
+crop_x = 0.5
+facecam = [0.0, 0.0, 0.25, 0.30]  # split : x, y, largeur, hauteur (fractions de l'image)
+facecam_ratio = 0.40
+game_x = 0.5
+crf = 20
+preset = "veryfast"
+fps = 30
+
+[subtitles]
+enabled = true
+model = "small"         # "base" si le PC est lent, "medium" si GPU
+language = "fr"
+device = "auto"         # "cuda" si carte NVIDIA
+words_per_line = 3
+font = "Arial Black"
+font_size = 88
+uppercase = true
+margin_v = 560
+
+[export]
+caption_template = "{hook} #jltomy #twitchfr #twitch #clip #fyp #pourtoi"
+keep_horizontal = false
+delete_raw = false
+
+[tiktok]
+auto_upload = false     # true => upload à la fin de chaque live
+mode = "inbox"          # "inbox" (brouillon dans l'appli) | "direct"
+client_key = ""         # ou variable d'env TIKTOK_CLIENT_KEY
+client_secret = ""      # ou variable d'env TIKTOK_CLIENT_SECRET
+redirect_uri = "http://localhost:8723/callback/"
+privacy_level = "SELF_ONLY"
