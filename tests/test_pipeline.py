@@ -1,4 +1,5 @@
 import json
+import subprocess
 
 import pytest
 
@@ -53,3 +54,19 @@ def test_subtitle_failure_does_not_block_export(session_dir, tmp_path, monkeypat
     clips = pipeline.process_session(cfg, session_dir)
     assert len(clips) == 1 and (clips[0] / "video.mp4").exists()
     assert "SOIRÉE CHILL" in (clips[0] / "caption.txt").read_text(encoding="utf-8")
+
+
+def test_probe_duration_of_fmp4_twitch_recording(tmp_path):
+    # Comme Streamlink sur une chaîne Twitch en fMP4 : init + segments pris en cours de live
+    # (horodatages qui ne commencent pas à 0). 3 segments de 2 s => 6 s de vidéo.
+    hls = tmp_path / "hls"
+    hls.mkdir()
+    subprocess.run([
+        "ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=320x180:rate=30",
+        "-f", "lavfi", "-i", "sine", "-t", "20", "-c:v", "libx264", "-preset", "ultrafast",
+        "-g", "60", "-c:a", "aac", "-f", "hls", "-hls_segment_type", "fmp4", "-hls_time", "2",
+        "-hls_list_size", "0", str(hls / "live.m3u8")], check=True)
+    rec = tmp_path / "stream.ts"
+    rec.write_bytes(b"".join((hls / name).read_bytes()
+                             for name in ["init.mp4", "live5.m4s", "live6.m4s", "live7.m4s"]))
+    assert video.probe(rec)["duration"] == pytest.approx(6.0, abs=0.2)

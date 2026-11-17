@@ -35,7 +35,13 @@ def probe(path: Path) -> dict:
     out = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
     data = json.loads(out)
     video = next((s for s in data.get("streams", []) if s.get("codec_type") == "video"), {})
-    duration = float(data.get("format", {}).get("duration") or video.get("duration") or 0)
+    fmt = data.get("format", {})
+    duration = float(fmt.get("duration") or video.get("duration") or 0)
+    if "mp4" in fmt.get("format_name", ""):
+        # Certaines chaînes Twitch sont en fMP4 : Streamlink écrit alors des fragments MP4 qui ne
+        # commencent pas à 0, et ffprobe compte la durée depuis 0 (pas depuis le début du fichier).
+        # Le MPEG-TS n'a pas ce problème. (`-ss` de ffmpeg, lui, est bien relatif au début.)
+        duration -= float(fmt.get("start_time") or 0)
     return {
         "duration": duration,
         "width": int(video.get("width") or 0),
