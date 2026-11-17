@@ -36,10 +36,25 @@ def _load_model(cfg: SubtitlesConfig):
     return _MODEL
 
 
+def _read_wav(wav: Path):
+    """Lit le wav 16 kHz mono 16 bits produit par ffmpeg (video.extract_audio).
+
+    On ne laisse pas faster-whisper décoder le fichier : il passe par PyAV, et faster-whisper 1.2.1
+    plante avec PyAV >= 15 (`open() got an unexpected keyword argument 'metadata_errors'`).
+    """
+    import wave
+
+    import numpy as np
+
+    with wave.open(str(wav), "rb") as fh:
+        frames = fh.readframes(fh.getnframes())
+    return np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+
+
 def transcribe(wav: Path, cfg: SubtitlesConfig) -> list[Word]:
     model = _load_model(cfg)
     segments, _info = model.transcribe(
-        str(wav), language=cfg.language or None, word_timestamps=True,
+        _read_wav(wav), language=cfg.language or None, word_timestamps=True,
         vad_filter=True, beam_size=5, condition_on_previous_text=False,
     )
     words: list[Word] = []
