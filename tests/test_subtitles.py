@@ -45,3 +45,13 @@ def test_zero_length_words_do_not_overlap():
     times = [l.split(",")[1:3] for l in ass.splitlines() if l.startswith("Dialogue:")]
     assert all(start < end for start, end in times)
     assert all(times[k][1] <= times[k + 1][0] for k in range(len(times) - 1))
+
+
+def test_hook_title_shown_at_the_top_for_the_first_seconds():
+    ass = build_ass(WORDS, SubtitlesConfig(), hook="Il a {vraiment} fait ça", hook_duration=3.0)
+    hook = [l for l in ass.splitlines() if ",Hook," in l and l.startswith("Dialogue:")]
+    assert len(hook) == 1
+    assert hook[0].split(",")[1:3] == ["0:00:00.00", "0:00:03.00"]
+    assert "Il a (vraiment) fait ça" in hook[0]
+    assert "Style: Hook," in ass
+    assert ",Hook," not in build_ass(WORDS, SubtitlesConfig())  # pas d'accroche par défaut

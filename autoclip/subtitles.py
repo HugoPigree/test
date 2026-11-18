@@ -110,7 +110,8 @@ def _escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("{", "(").replace("}", ")").replace("\n", " ")
 
 
-def build_ass(words: list[Word], cfg: SubtitlesConfig, width: int = 1080, height: int = 1920) -> str:
+def build_ass(words: list[Word], cfg: SubtitlesConfig, width: int = 1080, height: int = 1920,
+              hook: str = "", hook_duration: float = 0.0) -> str:
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}
@@ -121,11 +122,16 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Default,{cfg.font},{cfg.font_size},{cfg.color},{cfg.highlight_color},{cfg.outline_color},&H80000000,-1,0,0,0,100,100,0,0,1,{cfg.outline},2,2,60,60,{cfg.margin_v},1
+Style: Hook,{cfg.font},80,&H00000000,&H00000000,&H00FFFFFF,&H00FFFFFF,-1,0,0,0,100,100,0,0,3,18,0,8,90,90,260,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines = []
+    if hook and hook_duration > 0:
+        # Titre d'accroche : texte noir sur bandeau blanc, en haut, avec un fondu.
+        lines.append(f"Dialogue: 1,{_ts(0)},{_ts(hook_duration)},Hook,,0,0,0,,"
+                     f"{{\\fad(150,250)}}{_escape(hook)}")
     groups = group_words(words, cfg.words_per_line, cfg.max_chars)
     for g, group in enumerate(groups):
         texts = [(w.text.upper() if cfg.uppercase else w.text) for w in group]

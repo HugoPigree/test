@@ -5,6 +5,7 @@ import pytest
 
 from autoclip import pipeline, subtitles, video
 from autoclip.config import Config
+from autoclip.peaks import Peak
 
 
 def fake_transcribe(wav, cfg):
@@ -53,7 +54,50 @@ def test_subtitle_failure_does_not_block_export(session_dir, tmp_path, monkeypat
     cfg.detection.max_clips = 1
     clips = pipeline.process_session(cfg, session_dir)
     assert len(clips) == 1 and (clips[0] / "video.mp4").exists()
-    assert "SOIRÉE CHILL" in (clips[0] / "caption.txt").read_text(encoding="utf-8")
+    # Pas de parole : l'accroche vient du chat, et elle est quand même incrustée.
+    caption = (clips[0] / "caption.txt").read_text(encoding="utf-8")
+    assert caption.split(" #")[0] in {"MDR", "KEKW", "PTDRRR", "CLIP CLIP", "ahahahah", "OMEGALUL", "jpp", "????"}
+    assert ",Hook,," in (clips[0] / "subtitles.ass").read_text(encoding="utf-8")
+
+
+def test_hook_is_the_sentence_spoken_at_the_peak():
+    words = [subtitles.Word(1.0, 1.5, "Bon"), subtitles.Word(1.5, 2.0, "on"),
+             subtitles.Word(2.0, 2.5, "commence."),
+             subtitles.Word(20.0, 20.5, "Non"), subtitles.Word(20.5, 21.0, "il"),
+             subtitles.Word(21.0, 21.5, "l'a"), subtitles.Word(21.5, 22.0, "fait !"),
+             subtitles.Word(24.0, 24.5, "Quoi ?")]
+    peak = Peak(t_peak=123.0, start=100.0, end=129.0, score=5, activity=20, baseline=3,
+                n_messages=30, sample=["MAIS NON"])
+    cfg = Config()
+    assert pipeline.make_hook(cfg, words, peak, "titre") == "Non il l'a fait !"
+    assert pipeline.make_hook(cfg, [], peak, "titre") == "MAIS NON"
+    peak.sample = []
+    assert pipeline.make_hook(cfg, [], peak, "titre") == "titre"
+    cfg.export.hook_max_chars = 12
+    assert pipeline.make_hook(cfg, words, peak, "") == "Non il l'a…"
+
+
+def test_music_and_peak_zoom(session_dir, tmp_path, monkeypatch):
+    monkeypatch.setattr(subtitles, "transcribe", fake_transcribe)
+    music_dir = tmp_path / "music"
+    music_dir.mkdir()
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=5",
+                    str(music_dir / "boucle.mp3")], check=True)
+    cfg = Config()
+    cfg.paths.export = str(tmp_path / "out")
+    cfg.vertical.preset = "ultrafast"
+    cfg.vertical.peak_zoom = True
+    cfg.music.enabled = True
+    cfg.music.dir = str(music_dir)
+    cfg.detection.max_clips = 1
+    clips = pipeline.process_session(cfg, session_dir)
+    assert len(clips) == 1
+    info = video.probe(clips[0] / "video.mp4")
+    meta = json.loads((clips[0] / "meta.json").read_text(encoding="utf-8"))
+    # La musique (5 s) boucle : la vidéo garde la durée du clip.
+    assert abs(info["duration"] - (meta["clip_end"] - meta["clip_start"])) < 0.5
+    assert info["has_audio"] and (info["width"], info["height"]) == (1080, 1920)
+    assert meta["music"] == "boucle.mp3"
 
 
 def test_probe_duration_of_fmp4_twitch_recording(tmp_path):

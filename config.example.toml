@@ -19,7 +19,7 @@ threshold = 3.5         # baisse => plus de clips, monte => seulement les gros m
 min_activity = 15.0
 min_gap = 90.0
 max_clips = 12
-pre_roll = 20.0         # secondes gardées avant la réaction du chat
+pre_roll = 30.0         # secondes gardées avant la réaction du chat
 post_roll = 6.0
 min_duration = 15.0
 max_duration = 60.0
@@ -34,6 +34,7 @@ crop_x = 0.5
 facecam = [0.0, 0.0, 0.25, 0.30]  # split : x, y, largeur, hauteur (fractions de l'image)
 facecam_ratio = 0.40
 game_x = 0.5
+peak_zoom = false       # true => léger zoom au moment du pic de chat
 crf = 20
 preset = "veryfast"
 fps = 30
@@ -51,8 +52,14 @@ margin_v = 560
 
 [export]
 caption_template = "{hook} #jltomy #twitchfr #twitch #clip #fyp #pourtoi"
+hook_duration = 3.0     # titre d'accroche incrusté pendant les 3 premières secondes (0 = aucun)
 keep_horizontal = false
 delete_raw = false
+
+[music]
+enabled = false         # true => musique de fond prise au hasard dans music/ (mp3, m4a, wav…)
+dir = "music"
+volume = 0.10           # ~10 %, baissée automatiquement quand quelqu'un parle
 
 [tiktok]
 auto_upload = false     # true => upload à la fin de chaque live

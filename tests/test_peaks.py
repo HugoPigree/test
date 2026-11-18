@@ -38,3 +38,14 @@ def test_keyword_weight():
     assert message_weight("ahahahah", kw, 1.5) == 2.5
     assert message_weight("ptdrrrr", kw, 1.5) == 2.5
     assert message_weight("bonsoir", kw, 1.5) == 1.0
+
+
+def test_clip_duration_stays_between_min_and_max():
+    # pre_roll de 30 s, y compris pour des réactions collées au début ou à la fin du live.
+    cfg = DetectionConfig()
+    assert cfg.pre_roll == 30
+    for seed in range(5):
+        for bursts in ([2, 100, 222], [40, 140], [10, 230]):
+            for p in detect_peaks(synthetic_chat(seed=seed, bursts=bursts), START_TS, 240, cfg):
+                assert cfg.min_duration <= p.duration <= cfg.max_duration
+                assert 0 <= p.start <= p.t_peak <= p.end <= 240

@@ -100,23 +100,47 @@ def extract_audio(src: Path, start: float, duration: float, out_wav: Path) -> No
          str(out_wav)])
 
 
+def peak_zoom_filter(width: int, height: int, at: float, amount: float = 0.08) -> str:
+    """Zoom de `amount` centré : monte en 0,3 s jusqu'à `at`, tient ~2 s, redescend en 0,3 s."""
+    a, b = at - 0.3, at + 2.0
+    z = f"(1+{amount}*clip((t-{a:.3f})/0.3\\,0\\,1)*clip(({b:.3f}-t)/0.3\\,0\\,1))"
+    return (f"scale=w=trunc({width}*{z}/2)*2:h=trunc({height}*{z}/2)*2:eval=frame,"
+            f"crop={width}:{height}")
+
+
 def render_clip(src: Path, start: float, duration: float, out: Path, cfg: VerticalConfig,
                 src_w: int, src_h: int, ass_path: Path | None = None,
-                has_audio: bool = True) -> None:
-    """Un seul encodage : découpe précise + 9:16 + sous-titres incrustés."""
+                has_audio: bool = True, zoom_at: float | None = None,
+                music: Path | None = None, music_volume: float = 0.10) -> None:
+    """Un seul encodage : découpe précise + 9:16 (+ zoom au pic) + sous-titres (+ musique)."""
     graph = vertical_filter(cfg, src_w, src_h)
     assert graph.endswith("[v]")
     tail = f",fps={cfg.fps}"
+    if zoom_at is not None:
+        tail += "," + peak_zoom_filter(cfg.width, cfg.height, zoom_at)
     if ass_path is not None:
         # Nom relatif + cwd => pas de souci d'échappement des chemins Windows (C:\...).
         tail += f",ass={ass_path.name}"
     graph = f"{graph[:-3]}{tail}[v]"
 
-    cmd = [_bin("ffmpeg"), "-y", "-v", "error", "-ss", f"{start:.3f}", "-i", str(Path(src).resolve()),
-           "-t", f"{duration:.3f}", "-filter_complex", graph, "-map", "[v]"]
-    if has_audio:
-        cmd += ["-map", "0:a:0?", "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
-                "-af", "loudnorm=I=-14:TP=-1.5:LRA=11"]
+    loudnorm = "loudnorm=I=-14:TP=-1.5:LRA=11"
+    cmd = [_bin("ffmpeg"), "-y", "-v", "error", "-ss", f"{start:.3f}", "-i", str(Path(src).resolve())]
+    if has_audio and music is not None:
+        # Musique en boucle ; elle est baissée (sidechaincompress) dès que la bande de la voix
+        # (300-3400 Hz) du live est forte, donc quand quelqu'un parle (mais aussi sur un bruit fort).
+        cmd += ["-stream_loop", "-1", "-i", str(Path(music).resolve())]
+        stereo = "aformat=sample_rates=48000:channel_layouts=stereo"
+        graph += (f";[0:a:0]{loudnorm},{stereo},asplit=2[voice][sc0]"
+                  f";[sc0]highpass=f=300,lowpass=f=3400[sc]"
+                  f";[1:a:0]{stereo},volume={music_volume}[mus]"
+                  f";[mus][sc]sidechaincompress=threshold=0.02:ratio=8:attack=20:release=400[duck]"
+                  f";[voice][duck]amix=inputs=2:duration=first:normalize=0[a]")
+    # -t après toutes les entrées : il s'applique à la sortie (la musique boucle à l'infini).
+    cmd += ["-t", f"{duration:.3f}", "-filter_complex", graph, "-map", "[v]"]
+    if has_audio and music is not None:
+        cmd += ["-map", "[a]", "-c:a", "aac", "-b:a", "160k", "-ar", "48000"]
+    elif has_audio:
+        cmd += ["-map", "0:a:0?", "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-af", loudnorm]
     cmd += ["-c:v", "libx264", "-preset", cfg.preset, "-crf", str(cfg.crf),
             "-pix_fmt", "yuv420p", "-profile:v", "high", "-movflags", "+faststart",
             str(Path(out).resolve())]

@@ -41,7 +41,7 @@ class DetectionConfig:
     # Nombre maximal de clips par session (les meilleurs scores sont gardés).
     max_clips: int = 12
     # Le chat réagit après l'action : on remonte avant le début de la hausse.
-    pre_roll: float = 20.0
+    pre_roll: float = 30.0
     post_roll: float = 6.0
     min_duration: float = 15.0
     max_duration: float = 60.0
@@ -75,6 +75,8 @@ class VerticalConfig:
     facecam_ratio: float = 0.40
     # split : position horizontale du recadrage du jeu.
     game_x: float = 0.5
+    # Léger zoom (8 %) pendant ~2 s au moment du pic de chat.
+    peak_zoom: bool = False
     crf: int = 20
     preset: str = "veryfast"
     fps: int = 30
@@ -105,10 +107,20 @@ class SubtitlesConfig:
 @dataclass
 class ExportConfig:
     caption_template: str = "{hook} #jltomy #twitchfr #twitch #clip #fyp #pourtoi"
-    hook_max_chars: int = 90
+    hook_max_chars: int = 60
+    # Titre d'accroche incrusté en haut de la vidéo pendant les N premières secondes (0 = aucun).
+    hook_duration: float = 3.0
     keep_horizontal: bool = False
     # Supprimer l'enregistrement brut après traitement (gros fichiers !).
     delete_raw: bool = False
+
+
+@dataclass
+class MusicConfig:
+    # Musique de fond prise au hasard dans `dir`, baissée automatiquement quand quelqu'un parle.
+    enabled: bool = False
+    dir: str = "music"
+    volume: float = 0.10
 
 
 @dataclass
@@ -136,6 +148,7 @@ class Config:
     vertical: VerticalConfig = field(default_factory=VerticalConfig)
     subtitles: SubtitlesConfig = field(default_factory=SubtitlesConfig)
     export: ExportConfig = field(default_factory=ExportConfig)
+    music: MusicConfig = field(default_factory=MusicConfig)
     tiktok: TikTokConfig = field(default_factory=TikTokConfig)
 
 
