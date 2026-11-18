@@ -47,24 +47,24 @@ class ChatLogger(threading.Thread):
         self.channel = channel.lower().lstrip("#")
         self.out_path = Path(out_path) if out_path else None
         self.on_message = on_message
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
         self.count = 0
 
     def stop(self) -> None:
-        self._stop.set()
+        self._stop_event.set()
 
     def run(self) -> None:
         backoff = 1.0
         with self.out_path.open("a", encoding="utf-8") if self.out_path else nullcontext() as out:
-            while not self._stop.is_set():
+            while not self._stop_event.is_set():
                 try:
                     self._session(out)
                     backoff = 1.0
                 except OSError as exc:
-                    if self._stop.is_set():
+                    if self._stop_event.is_set():
                         break
                     log.warning("Chat déconnecté (%s), reconnexion dans %.0fs", exc, backoff)
-                    self._stop.wait(backoff)
+                    self._stop_event.wait(backoff)
                     backoff = min(backoff * 2, 60)
 
     def _session(self, out) -> None:
@@ -79,7 +79,7 @@ class ChatLogger(threading.Thread):
             log.info("Chat connecté à #%s", self.channel)
             buf = b""
             last_rx = time.monotonic()
-            while not self._stop.is_set():
+            while not self._stop_event.is_set():
                 try:
                     data = sock.recv(65536)
                 except socket.timeout:
