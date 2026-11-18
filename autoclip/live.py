@@ -6,7 +6,8 @@
 - Le chat est gardé en mémoire et analysé toutes les 5 s avec la même détection que `process`.
 - Quand la fin d'un pic (pic + post_roll) est passée, les segments qui le couvrent sont copiés
   dans recordings/<chaîne>_queue/ puis le clip part dans une file : un seul clip est traité à la
-  fois, en priorité basse (nice), pour ne pas gêner l'enregistrement.
+  fois, en priorité basse (nice sous Linux, « inférieure à la normale » sous Windows), pour ne
+  pas gêner l'enregistrement.
 - Si Streamlink s'arrête (coupure, fin du live), on revérifie le live et on relance une nouvelle
   connexion. Le chat se reconnecte tout seul (ChatLogger).
 """
@@ -19,6 +20,7 @@ import os
 import queue
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
@@ -35,6 +37,8 @@ log = logging.getLogger(__name__)
 PTS_WRAP = 2 ** 33 / 90000  # les horodatages MPEG-TS repartent de 0 toutes les ~26,5 h
 DETECT_EVERY = 5.0          # secondes entre deux analyses du chat
 VIDEO_MARGIN = 10.0         # secondes laissées à la vidéo pour arriver sur le disque
+# Windows : l'enregistrement garde la priorité normale même si autoclip est en priorité basse.
+WIN_NORMAL = {"creationflags": subprocess.NORMAL_PRIORITY_CLASS} if sys.platform == "win32" else {}
 
 
 def _start_time(path: Path) -> float | None:
@@ -68,8 +72,8 @@ class Recording:
                   "-f", "segment", "-segment_time", str(cfg.live.segment_seconds),
                   "-segment_format", "mpegts", str(self.dir / "seg_%05d.ts")]
         log.info("Enregistrement en segments → %s", self.dir)
-        self.streamlink = subprocess.Popen(streamlink, stdout=subprocess.PIPE)
-        self.ffmpeg = subprocess.Popen(ffmpeg, stdin=self.streamlink.stdout)
+        self.streamlink = subprocess.Popen(streamlink, stdout=subprocess.PIPE, **WIN_NORMAL)
+        self.ffmpeg = subprocess.Popen(ffmpeg, stdin=self.streamlink.stdout, **WIN_NORMAL)
         self.streamlink.stdout.close()  # seul ffmpeg lit le tuyau
 
     def alive(self) -> bool:
@@ -157,9 +161,23 @@ def ready_peaks(cfg: Config, messages: list[dict], now: float, last_clip: float)
 
 
 def _lower_priority() -> None:
-    """nice 10 pour le thread courant (Linux) : Whisper et les ffmpeg lancés d'ici en héritent."""
+    """Priorité basse pour le traitement des clips : Whisper et les ffmpeg lancés d'ici en héritent.
+
+    Linux : nice 10 sur le thread courant seulement. Windows : une priorité de thread ne passe pas
+    aux process enfants, donc tout autoclip passe en « inférieure à la normale » ; Streamlink et
+    le ffmpeg du buffer restent en priorité normale (WIN_NORMAL dans Recording).
+    """
     try:
-        os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), 10)
+        if sys.platform == "win32":
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            # Sans ces types, ctypes tronque le handle à 32 bits et l'appel échoue.
+            kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+            kernel32.SetPriorityClass.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+            if not kernel32.SetPriorityClass(kernel32.GetCurrentProcess(), 0x4000):  # BELOW_NORMAL
+                raise OSError
+        else:
+            os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), 10)
     except (AttributeError, OSError):
         log.warning("Impossible de baisser la priorité du traitement des clips.")
 
