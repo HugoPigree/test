@@ -11,6 +11,7 @@ import random
 import socket
 import threading
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -40,10 +41,12 @@ def parse_irc_line(line: str) -> dict | None:
 
 
 class ChatLogger(threading.Thread):
-    def __init__(self, channel: str, out_path: Path):
+    def __init__(self, channel: str, out_path: Path | None, on_message=None):
+        """Écrit les messages dans `out_path` (JSONL) et/ou les passe à `on_message(msg)`."""
         super().__init__(daemon=True, name=f"chat-{channel}")
         self.channel = channel.lower().lstrip("#")
-        self.out_path = Path(out_path)
+        self.out_path = Path(out_path) if out_path else None
+        self.on_message = on_message
         self._stop = threading.Event()
         self.count = 0
 
@@ -52,7 +55,7 @@ class ChatLogger(threading.Thread):
 
     def run(self) -> None:
         backoff = 1.0
-        with self.out_path.open("a", encoding="utf-8") as out:
+        with self.out_path.open("a", encoding="utf-8") if self.out_path else nullcontext() as out:
             while not self._stop.is_set():
                 try:
                     self._session(out)
@@ -97,9 +100,13 @@ class ChatLogger(threading.Thread):
                         raise OSError("RECONNECT demandé par Twitch")
                     msg = parse_irc_line(line)
                     if msg:
-                        out.write(json.dumps(msg, ensure_ascii=False) + "\n")
+                        if out:
+                            out.write(json.dumps(msg, ensure_ascii=False) + "\n")
+                        if self.on_message:
+                            self.on_message(msg)
                         self.count += 1
-                out.flush()
+                if out:
+                    out.flush()
 
 
 def load_chat(path: Path) -> list[dict]:

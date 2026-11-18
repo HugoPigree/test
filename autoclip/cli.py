@@ -1,4 +1,4 @@
-"""Ligne de commande : `autoclip watch | record | process | detect | upload | tiktok-auth | check`."""
+"""Ligne de commande : `autoclip live | watch | record | process | detect | upload | tiktok-auth | check`."""
 
 from __future__ import annotations
 
@@ -51,6 +51,13 @@ def cmd_watch(cfg: Config, args) -> int:
             _process_and_upload(cfg, last)
     for t in workers:
         t.join()
+    return 0
+
+
+def cmd_live(cfg: Config, args) -> int:
+    from autoclip.live import run_live
+
+    run_live(cfg)
     return 0
 
 
@@ -170,6 +177,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--once", action="store_true", help="s'arrête après un live")
     p.add_argument("--no-process-on-exit", action="store_true")
     p.set_defaults(func=cmd_watch)
+
+    p = sub.add_parser("live", help="mode continu : buffer glissant, clips coupés pendant le live")
+    p.set_defaults(func=cmd_live)
 
     p = sub.add_parser("record", help="enregistre maintenant (vidéo + chat)")
     p.add_argument("--duration", type=float, help="durée max en secondes (test)")

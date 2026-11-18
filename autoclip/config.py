@@ -116,6 +116,15 @@ class ExportConfig:
 
 
 @dataclass
+class LiveConfig:
+    # Mode continu (`autoclip live`) : segments vidéo de N secondes, gardés `buffer_minutes`.
+    segment_seconds: int = 300
+    buffer_minutes: float = 45.0
+    # Pas de nouveau clip moins de N secondes après le pic du clip précédent (anti-doublon).
+    cooldown: float = 90.0
+
+
+@dataclass
 class MusicConfig:
     # Musique de fond prise au hasard dans `dir`, baissée automatiquement quand quelqu'un parle.
     enabled: bool = False
@@ -149,6 +158,7 @@ class Config:
     subtitles: SubtitlesConfig = field(default_factory=SubtitlesConfig)
     export: ExportConfig = field(default_factory=ExportConfig)
     music: MusicConfig = field(default_factory=MusicConfig)
+    live: LiveConfig = field(default_factory=LiveConfig)
     tiktok: TikTokConfig = field(default_factory=TikTokConfig)
 
 

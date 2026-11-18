@@ -27,6 +27,7 @@ chat IRC   ──► recordings/<session>/chat.jsonl ┴─► pics de chat ─�
 
 | Commande | Effet |
 |---|---|
+| `autoclip live` | **Mode continu**, pour un live qui ne s'arrête jamais (subathon) : enregistre en segments de 5 min en ne gardant que les 45 dernières minutes, analyse le chat en continu et coupe chaque clip pendant le live. Les clips sont traités un par un en priorité basse. Se relance tout seul après une coupure du stream ou du chat. Ctrl+C = arrêt, les clips déjà coupés sont terminés. |
 | `autoclip watch` | Attend que JLTomy lance son live, enregistre vidéo + chat, et génère les clips à la fin du live. Tourne en boucle. Ctrl+C = arrêt propre, la session en cours est quand même traitée. |
 | `autoclip record --duration 600 --process` | Enregistre 10 min maintenant puis traite la session (pratique pour tester pendant un live). |
 | `autoclip detect recordings/<session>` | Affiche la courbe du chat et les pics trouvés, sans rien encoder (pour régler les seuils). |
@@ -50,14 +51,17 @@ chat IRC   ──► recordings/<session>/chat.jsonl ┴─► pics de chat ─�
 ## Réglages utiles (`config.toml`)
 
 - **Trop ou pas assez de clips** : `detection.threshold` (3.5 par défaut, baisser à 2.5 donne plus de clips) et `detection.max_clips`.
-- **Clip qui commence trop tard ou trop tôt** : `detection.pre_roll` (20 s avant la réaction du chat) et `detection.chat_offset`.
+- **Clip qui commence trop tard ou trop tôt** : `detection.pre_roll` (30 s avant la réaction du chat) et `detection.chat_offset`.
+- **Accroche** : la phrase dite au moment du pic (sinon le message du chat le plus répété, sinon le titre du live) est incrustée en haut pendant `export.hook_duration` secondes (3 par défaut, 0 = aucune) et reprise dans `caption.txt`.
+- **Musique de fond** (désactivée) : `[music] enabled = true`, puis mets des morceaux libres de droits dans `music/`. Volume ~10 %, baissé automatiquement quand le son du live est fort dans la bande de la voix.
+- **Zoom au pic** (désactivé) : `vertical.peak_zoom = true` (zoom de 8 % pendant ~2 s).
 - **Cadrage** : `vertical.layout`
   - `blur` (par défaut) : image entière sur fond flouté. Marche avec tout, rien n'est coupé.
   - `crop` : recadrage plein écran, centré par défaut (`crop_x` pour décaler).
   - `split` : facecam en haut, jeu en bas. Renseigne `facecam = [x, y, l, h]` en fractions de l'image (ex. webcam en bas à droite sur un quart d'écran : `[0.75, 0.70, 0.25, 0.30]`).
 - **PC lent** : `subtitles.model = "base"`. **GPU NVIDIA** : `device = "cuda"`, `model = "medium"`.
 - **Pubs Twitch** : sans compte sub/Turbo, Streamlink saute les pubs, ce qui laisse des trous dans la vidéo. Renseigne `twitch.oauth_token` (cookie `auth-token` de twitch.tv) pour les éviter.
-- **Disque** : compte environ 2,5 à 3 Go par heure en 1080p60. `export.delete_raw = true` supprime l'enregistrement brut une fois tous les clips générés.
+- **Disque** : compte environ 2,5 à 3,5 Go par heure en 1080p60. En mode `live`, le buffer reste autour de 2 à 3 Go (`[live] buffer_minutes`, `segment_seconds`, et `cooldown` entre deux clips). `export.delete_raw = true` supprime l'enregistrement brut une fois tous les clips générés.
 
 ## Upload TikTok
 

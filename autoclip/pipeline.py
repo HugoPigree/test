@@ -78,10 +78,11 @@ def pick_music(cfg: Config) -> Path | None:
     return random.choice(tracks)
 
 
-def process_peak(cfg: Config, session: dict, meta: dict, peak: Peak, index: int) -> Path | None:
+def process_peak(cfg: Config, session: dict, meta: dict, peak: Peak, index: int,
+                 name: str | None = None) -> Path | None:
     start_dt = datetime.fromtimestamp(session["start_ts"])
-    name = (f"{start_dt:%Y-%m-%d}_{session['channel']}_{index:02d}_"
-            f"{fmt_time(peak.t_peak).replace(':', 'h', 1).replace(':', 'm')}s")
+    name = name or (f"{start_dt:%Y-%m-%d}_{session['channel']}_{index:02d}_"
+                    f"{fmt_time(peak.t_peak).replace(':', 'h', 1).replace(':', 'm')}s")
     out_dir = Path(cfg.paths.export) / name
     final = out_dir / "video.mp4"
     if final.exists():

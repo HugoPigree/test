@@ -61,6 +61,13 @@ enabled = false         # true => musique de fond prise au hasard dans music/ (m
 dir = "music"
 volume = 0.10           # ~10 %, baissée automatiquement quand quelqu'un parle
 
+[live]
+# Mode continu (`autoclip live`) : le live est découpé en segments et seules les dernières
+# minutes sont gardées sur le disque ; les clips sont coupés pendant le live.
+segment_seconds = 300
+buffer_minutes = 45
+cooldown = 90           # secondes minimum entre les pics de deux clips (anti-doublon)
+
 [tiktok]
 auto_upload = false     # true => upload à la fin de chaque live
 mode = "inbox"          # "inbox" (brouillon dans l'appli) | "direct"
