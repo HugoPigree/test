@@ -7,3 +7,4 @@ config.toml
 recordings/
 ready_to_post/
 *.log
+music/

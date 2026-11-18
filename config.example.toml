@@ -1,64 +1,79 @@
-# Copie ce fichier en config.toml et adapte. Toutes les clés sont optionnelles.
+# Copie ce fichier en config.toml (scripts/setup_server.sh le fait) et adapte.
+# Toutes les clés sont optionnelles : une clé absente garde la valeur par défaut ci-dessous.
+# Ne mets JAMAIS de secret ici : ce fichier est versionné. Les secrets vont dans config.toml
+# (ignoré par git) ou dans les variables d'environnement indiquées.
 
 [twitch]
-channel = "jltomy"
-quality = "1080p60,1080p,720p60,720p,best"
-# Token OAuth d'un compte sub/Turbo (cookie "auth-token" de twitch.tv) => pas de pubs,
-# donc pas de trous dans l'enregistrement. Peut aussi venir de TWITCH_OAUTH_TOKEN.
+channel = "jltomy"      # chaîne surveillée (une seule)
+quality = "1080p60,1080p,720p60,720p,best"  # qualités par ordre de préférence (syntaxe Streamlink)
+# Token d'un compte sub/Turbo (cookie "auth-token" de twitch.tv) => pas de pubs, donc pas de trous
+# dans la vidéo. Secret : à mettre dans config.toml ou dans la variable TWITCH_OAUTH_TOKEN.
 oauth_token = ""
-poll_interval = 60
+poll_interval = 60      # secondes entre deux vérifications "est-ce qu'il est en live ?"
 
 [paths]
-recordings = "recordings"
-export = "ready_to_post"
+recordings = "recordings"   # enregistrements bruts et buffer du mode continu
+export = "ready_to_post"    # clips finis, un dossier par clip
 
 [detection]
-window = 10.0           # fenêtre d'activité (s)
-baseline_window = 300.0 # ligne de base (s)
+window = 10.0           # fenêtre d'activité du chat (s)
+baseline_window = 300.0 # ligne de base (s) ; en mode continu, rien n'est détecté avant ce délai
 threshold = 3.5         # baisse => plus de clips, monte => seulement les gros moments
-min_activity = 15.0
-min_gap = 90.0
-max_clips = 12
+min_activity = 15.0     # activité minimale (messages pondérés sur `window`) pour un pic
+min_gap = 90.0          # écart minimal entre deux pics (s)
+max_clips = 12          # clips max par session (les meilleurs scores sont gardés)
 pre_roll = 30.0         # secondes gardées avant la réaction du chat
-post_roll = 6.0
-min_duration = 15.0
-max_duration = 60.0
+post_roll = 6.0         # secondes gardées après le pic
+min_duration = 15.0     # durée minimale d'un clip (s)
+max_duration = 60.0     # durée maximale d'un clip (s)
 chat_offset = 0.0       # si les clips coupent trop tôt/tard : ajuste (+ = chat en retard)
-keyword_weight = 1.5
-# keywords = ["mdr", "ptdr", "kekw", ...]  # remplace la liste par défaut
+keyword_weight = 1.5    # bonus pour un message contenant un mot de hype
+keywords = ["mdr", "ptdr", "xptdr", "jpp", "lol", "lmao", "kekw", "omegalul", "lul", "ahah",
+            "haha", "hahaha", "pog", "poggers", "pogchamp", "pogu", "wtf", "omg", "clip",
+            "clipped", "+1", "gg", "énorme", "enorme", "incroyable", "aled", "sheesh", "noway",
+            "monkas", "pepelaugh", "icant", "w", "dinguerie", "masterclass", "chokbar", "ratio"]
 
 [vertical]
-layout = "blur"         # "blur" | "crop" | "split"
-blur_zoom = 1.15
-crop_x = 0.5
-facecam = [0.0, 0.0, 0.25, 0.30]  # split : x, y, largeur, hauteur (fractions de l'image)
-facecam_ratio = 0.40
-game_x = 0.5
-peak_zoom = false       # true => léger zoom au moment du pic de chat
-crf = 20
-preset = "veryfast"
+layout = "blur"         # "blur" (image entière sur fond flou) | "crop" (recadrage) | "split" (facecam + jeu)
+width = 1080            # taille de sortie (format TikTok)
+height = 1920
+blur_zoom = 1.15        # blur : zoom de l'image principale (1.0 = image entière)
+crop_x = 0.5            # crop : position horizontale (0 = gauche, 0.5 = centre, 1 = droite)
+facecam = [0.0, 0.0, 0.25, 0.30]  # split : x, y, largeur, hauteur de la facecam (fractions de l'image)
+facecam_ratio = 0.40    # split : part de la hauteur occupée par la facecam
+game_x = 0.5            # split : position horizontale du recadrage du jeu
+peak_zoom = false       # true => léger zoom (8 %) pendant ~2 s au moment du pic de chat
+crf = 20                # qualité x264 (plus bas = meilleure qualité, fichier plus gros)
+preset = "veryfast"     # vitesse d'encodage x264 ("ultrafast" sur une machine lente)
 fps = 30
 
 [subtitles]
 enabled = true
-model = "small"         # "base" si le PC est lent, "medium" si GPU
+model = "small"         # "base" si la machine est lente, "medium" si GPU
 language = "fr"
 device = "auto"         # "cuda" si carte NVIDIA
-words_per_line = 3
-font = "Arial Black"
+compute_type = "auto"   # précision des calculs Whisper (auto = choix de faster-whisper)
+words_per_line = 3      # mots affichés en même temps
+max_chars = 20          # caractères max par ligne de sous-titres
+font = "Arial Black"    # si absente, une police grasse proche est utilisée
 font_size = 88
 uppercase = true
-margin_v = 560
+color = "&H00FFFFFF"            # couleurs ASS (&HAABBGGRR) : texte (blanc)
+highlight_color = "&H0000E5FF"  # mot en cours (jaune)
+outline_color = "&H00000000"    # contour (noir)
+outline = 6             # épaisseur du contour
+margin_v = 560          # distance des sous-titres depuis le bas (pixels sur 1920)
 
 [export]
-caption_template = "{hook} #jltomy #twitchfr #twitch #clip #fyp #pourtoi"
-hook_duration = 3.0     # titre d'accroche incrusté pendant les 3 premières secondes (0 = aucun)
-keep_horizontal = false
-delete_raw = false
+caption_template = "{hook} #jltomy #twitchfr #twitch #clip #fyp #pourtoi"  # texte de caption.txt
+hook_max_chars = 60     # longueur max de l'accroche
+hook_duration = 3.0     # accroche incrustée en haut pendant les 3 premières secondes (0 = aucune)
+keep_horizontal = false # true => garde aussi une version 16:9 du clip
+delete_raw = false      # true => supprime l'enregistrement brut après `process`
 
 [music]
-enabled = false         # true => musique de fond prise au hasard dans music/ (mp3, m4a, wav…)
-dir = "music"
+enabled = false         # true => musique de fond prise au hasard dans `dir` (mp3, m4a, wav…)
+dir = "music"           # musiques libres de droits uniquement
 volume = 0.10           # ~10 %, baissée automatiquement quand quelqu'un parle
 
 [live]
@@ -69,9 +84,13 @@ buffer_minutes = 45
 cooldown = 90           # secondes minimum entre les pics de deux clips (anti-doublon)
 
 [tiktok]
-auto_upload = false     # true => upload à la fin de chaque live
-mode = "inbox"          # "inbox" (brouillon dans l'appli) | "direct"
-client_key = ""         # ou variable d'env TIKTOK_CLIENT_KEY
-client_secret = ""      # ou variable d'env TIKTOK_CLIENT_SECRET
+auto_upload = false     # true => upload automatique de chaque clip fini
+mode = "inbox"          # "inbox" (brouillon dans l'appli, sans audit) | "direct" (publication)
+client_key = ""         # secret : dans config.toml ou variable TIKTOK_CLIENT_KEY
+client_secret = ""      # secret : dans config.toml ou variable TIKTOK_CLIENT_SECRET
 redirect_uri = "http://localhost:8723/callback/"
-privacy_level = "SELF_ONLY"
+token_file = ".tiktok_token.json"  # créé par `autoclip tiktok-auth` (ignoré par git)
+privacy_level = "SELF_ONLY"        # mode direct : privé tant que l'appli n'est pas auditée
+disable_comment = false
+disable_duet = false
+disable_stitch = false

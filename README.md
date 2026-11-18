@@ -77,6 +77,50 @@ Modes disponibles :
 
 Avec `tiktok.auto_upload = true`, l'upload se fait tout seul à la fin de chaque live.
 
+## Déploiement sur le serveur
+
+Pour une machine Linux toujours allumée, pilotée depuis le téléphone avec Claude Code (Remote Control).
+Le contexte du projet pour Claude est dans `CLAUDE.md` : une nouvelle session repart de là.
+
+**1. Installer** (une fois ; `setup_server.sh` est relançable et dit ce qui manque, sans sudo) :
+
+```bash
+git clone https://github.com/HugoPigree/test.git twitch-autoclip
+cd twitch-autoclip
+git checkout claude/affectionate-faraday-vx9g05
+scripts/setup_server.sh
+```
+
+**2. Ouvrir Claude Code dans tmux** (pour qu'il survive à la déconnexion SSH) :
+
+```bash
+tmux new -s claude        # dans le dossier twitch-autoclip
+claude                    # si absent : curl -fsSL https://claude.ai/install.sh | bash
+```
+
+Dans Claude Code : `/rename autoclip-serveur`, puis `/remote-control` et suivre les instructions
+affichées pour se connecter depuis le téléphone. Ensuite `Ctrl+B` puis `D` pour quitter tmux sans
+arrêter Claude.
+
+**3. Lancer l'outil** (ou le demander à Claude depuis le téléphone) :
+
+```bash
+scripts/run_tmux.sh       # autoclip live dans la session tmux « autoclip »
+```
+
+Le buffer vidéo est dans `recordings/jltomy_buffer/` (~3 Go max), les clips dans `ready_to_post/`,
+le journal dans `autoclip.log`.
+
+**Si ça s'arrête :**
+
+- Voir l'erreur : `tmux attach -t autoclip` (la fenêtre reste ouverte après un arrêt) ou
+  `tail -n 50 autoclip.log`.
+- Relancer : `scripts/run_tmux.sh` (ne fait rien si autoclip tourne déjà).
+- Après un redémarrage du serveur, les sessions tmux sont perdues : refaire `tmux new -s claude`,
+  `claude --continue` (reprend la dernière conversation), `/remote-control`, puis `scripts/run_tmux.sh`.
+- Après une mise à jour du code : `git pull`, `scripts/setup_server.sh`, puis arrêter autoclip
+  (`tmux attach -t autoclip`, Ctrl+C) et relancer `scripts/run_tmux.sh`.
+
 ## Droits
 
 Ces clips utilisent le contenu de JLTomy. Avant de les publier, vérifie que tu as son accord ou qu'il autorise les comptes de clips. Sans ça, TikTok peut retirer les vidéos ou bloquer le compte pour violation de droits d'auteur.
