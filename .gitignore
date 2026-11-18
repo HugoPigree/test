@@ -8,3 +8,6 @@ recordings/
 ready_to_post/
 *.log
 music/
+candidates/
+heartbeat.json
+*.log.*

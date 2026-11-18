@@ -69,8 +69,14 @@ brouillons depuis son téléphone.
   de clips** (`live._worker`) pour ne charger qu'un Whisper et n'encoder qu'un clip à la fois.
   Si une chaîne plante, `run_live` s'arrête (code 1) et la tâche planifiée relance tout.
 - Son stream ne s'arrête jamais (subathon). Le traitement « à la fin du live » (`watch`) ne sert donc
-  à rien : on utilise le **mode continu** `autoclip live` (segments, buffer de 45 min max, file
-  d'attente traitée en `nice`).
+  à rien : on utilise le **mode continu** `autoclip live` (segments, buffer de 45 min max).
+- **Depuis le 18/11/2026 (demandé) : quota quotidien.** Chaque pic devient une candidate (clip brut
+  sans réencodage dans `candidates/`, `.ts` + `.json`) ; le rendu complet n'est fait qu'au tri
+  quotidien (`[daily]` : `max_clips_per_day` 5, `min_gap_minutes` 20 par chaîne, `selection_time`
+  23:00, `retention_hours` 48, `max_disk_gb` 20) dans `ready_to_post/AAAA-MM-JJ/` + `classement.md`.
+  Quota global (toutes chaînes). Superviseur PowerShell (`scripts/run_autoclip.ps1`, délai
+  croissant) lancé par la tâche planifiée ; `heartbeat.json` chaque minute ; `autoclip.log`
+  tournant (5 Mo × 5). Ne rien ajouter d'autre à ce mode sans demande.
 - Les clips arrivent en brouillons TikTok, postés à la main depuis le téléphone. Au début, 1 à 2
   clips postés par jour.
 - Machine cible (depuis le 18/11/2026) : un **serveur Windows** peu puissant, toujours allumé,
@@ -93,7 +99,9 @@ brouillons depuis son téléphone.
 | `autoclip/video.py` | ffprobe / ffmpeg : 9:16 (`blur` / `crop` / `split`), zoom au pic, musique (sidechaincompress), miniature. |
 | `autoclip/subtitles.py` | faster-whisper (`hotwords` = vocabulaire + titre du live, puis `fixes`), recollage des élisions, ASS : mot qui « saute », titre qui rebondit, chat qui défile en bas à gauche (`pick_chat`). |
 | `autoclip/context.py` | Titre, légende, hashtags et corrections de mots écrits par Claude via `claude -p --model haiku --tools "" --json-schema …` (abonnement Claude de l'utilisateur, pas de clé API), lancé dans un dossier vide. Si Claude manque ou échoue : `None`, et le pipeline reprend l'ancienne accroche. |
-| `autoclip/live.py` | Mode continu : un thread `_watch` par chaîne (`streamlink --stdout` → `ffmpeg -f segment` en MPEG-TS, purge du buffer, détection toutes les 5 s, découpe depuis les segments) et un seul `_worker` pour toutes les chaînes, en priorité basse. Chaque tâche de la file emporte la config de sa chaîne (`channel_config`). |
+| `autoclip/live.py` | Mode continu : un thread `_watch` par chaîne (`streamlink --stdout` → `ffmpeg -f segment` en MPEG-TS, purge du buffer, détection toutes les 5 s, découpe depuis les segments → candidate). Boucle principale de `run_live` : tri quotidien (thread `_selection`, priorité basse), nettoyage toutes les 10 min, heartbeat chaque minute ; si une chaîne plante, code 1 et le superviseur relance. |
+| `autoclip/daily.py` | Candidates (`trim_copy` : coupe `-c copy -copyts`, vrai début calculé par `start_time`), doublons lus sur le disque (`live.cooldown`), tri (`pick`, `run_selection`, `classement.md`), `cleanup` (rétention, limite disque, restes d'arrêt brutal), `write_heartbeat`. État du tri dans `candidates/_etat.json`. |
+| `scripts/run_autoclip.ps1` | Superviseur : relance `autoclip live` avec 30 s, 1, 2, 4… 15 min ; remis à 30 s après 1 h de marche. |
 | `autoclip/top.py` | `autoclip top --lang fr --count 3` (demandé le 18/11/2026) : API Helix (jeton d'appli, Get Top Games pour les `top_games` = 100 catégories les plus regardées du moment, 1 page chacune, + Get Games pour `[top] categories`, 5 pages chacune ; puis Get Clips 24 h par catégorie), filtre langue, doublons (id, ou même VOD à < 60 s), tri par vues ; yt-dlp ; `process_peak` sur le clip entier (60 s max, accroche 3 s, pas de zoom ni de chat) ; `ready_to_post/top_AAAA-MM-JJ_NN/` avec crédit streamer + clippeur + lien dans `caption.txt`, vues / lien / chaîne dans `meta.json`. Jamais d'upload TikTok. Identifiants : `[top] client_id / client_secret` ou `TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET`. |
 | `autoclip/tiktok.py` | OAuth + Content Posting API (`inbox` / `direct`). **Jamais testé en vrai.** |
 | `scripts/setup_server.sh` | Installation idempotente, sans sudo (venv, dépendances, modèle Whisper, config, check). |
@@ -108,7 +116,9 @@ lance Streamlink et le ffmpeg du buffer avec `NORMAL_PRIORITY_CLASS` (`WIN_NORMA
 Fichiers produits (tous ignorés par git) :
 - `recordings/<chaîne>_<date>/` : `stream.ts`, `chat.jsonl`, `session.json` (`record` / `watch`).
 - `recordings/<chaîne>_buffer/<connexion>/seg_XXXXX.ts` : buffer du mode `live`.
-  `recordings/<chaîne>_queue/` : clips coupés en attente de traitement.
+- `candidates/` : candidates du mode `live` (`.ts` brut + `.json`), `_etat.json` (dernier tri).
+- `ready_to_post/AAAA-MM-JJ/NN_<chaîne>_HHhMM/` + `classement.md` : tri quotidien.
+- `heartbeat.json`, `autoclip.log` (+ `.1`…`.5`), `autoclip-superviseur.log`, `autoclip-erreurs.log`.
 - `ready_to_post/<clip>/` : `video.mp4`, `caption.txt`, `thumbnail.jpg`, `subtitles.ass`, `meta.json`.
 - `autoclip.log` : journal.
 
@@ -169,6 +179,28 @@ faster-whisper 1.2.1), **18/11/2026** :
   19h58) **impossibles** : ces passages sont muets dans la VOD (Twitch les a coupés, sûrement pour
   de la musique protégée dans ce qu'Etostark regardait) ; ils restent avec l'ancien mixage et
   risquent aussi un blocage sur TikTok.
+- **Mode continu avec quota, vrai live, 18/11/2026 22:32 → 23:50** (JLTomy en live, Etostark
+  hors ligne tout du long), lancé par le superviseur `run_autoclip.ps1` avec la vraie config
+  (tri avancé à 23:45 pour le test, remis à 23:00 ensuite) :
+  - 17 candidates en ~75 min (≈ 1 toutes les 5 min), ~45 Mo chacune (43-47 s de 1080p60 brut),
+    créées en ~1 s (copie sans réencodage) ; fenêtre du clip et pic bien placés dans le brut.
+  - Heartbeat mis à jour chaque minute (chaîne en live, enregistrement, dernier message de chat).
+  - Coupure du stream (Streamlink tué à 22:52) : relance en 4 s, nouvelle connexion.
+  - **Bug trouvé et corrigé** : au premier plantage simulé, Streamlink et ffmpeg survivaient à
+    autoclip, gardaient ouvert `autoclip-erreurs.log`, et chaque relance du superviseur échouait
+    aussitôt (code 1 en 0 s). Corrigé : Job Object « tuer à la fermeture » (`live._children_die_with_me`)
+    + un fichier d'erreurs par lancement. Retesté : processus enfants morts en < 4 s, relance après
+    30 s puis 60 s au plantage suivant (délai croissant OK). Interruption réelle ~3 min au total.
+  - Tri à 23:45 : 15 candidates, 3 retenues (une seule chaîne en live et 20 min d'écart : 3 était
+    le maximum), rendues en 67-70 s chacune pendant que la détection continuait ; `classement.md`
+    correct ; bruts des retenues supprimés, non retenues gardées, `_etat.json` à jour.
+  - Pas de doublon autour des 3 redémarrages ; la vérification sur disque (`is_duplicate`) n'a
+    pas eu à servir pendant ce test (seulement couverte par les tests unitaires).
+  - **Pas testé en vrai** : suppression à 48 h et limite disque (tests unitaires seulement),
+    rotation du journal (jamais atteint 5 Mo), reconnexion du chat (seulement celle du stream),
+    tri avec 5 clips et deux chaînes, **tâche planifiée au démarrage** (demande un PowerShell
+    admin, pas encore lancée). Estimation : à ce rythme ~13 Go de candidates par jour, donc la
+    limite de 20 Go jouera avant les 48 h (les non retenues partent en premier).
 - `autoclip top` : étapes 2 à 4 testées sur un vrai clip Etostark (« pauvre Fousseyd », 17 s,
   URL `clips.twitch.tv/…`) : yt-dlp OK, clip entier en 1080x1920, titre de Claude 3 s, légende
   avec crédit + lien, 33 s de traitement.

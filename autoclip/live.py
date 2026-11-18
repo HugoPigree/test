@@ -4,12 +4,13 @@
   recordings/<chaîne>_buffer/<connexion>/ ; les segments plus vieux que `live.buffer_minutes`
   sont supprimés, donc le disque ne grossit pas.
 - Le chat est gardé en mémoire et analysé toutes les 5 s avec la même détection que `process`.
-- Quand la fin d'un pic (pic + post_roll) est passée, les segments qui le couvrent sont copiés
-  dans recordings/<chaîne>_queue/ puis le clip part dans une file : un seul clip est traité à la
-  fois, en priorité basse (nice sous Linux, « inférieure à la normale » sous Windows), pour ne
-  pas gêner l'enregistrement.
+- Quand la fin d'un pic (pic + post_roll) est passée, il devient une candidate : clip brut coupé
+  sans réencodage dans candidates/ (voir daily.py). Le rendu complet n'est fait qu'une fois par
+  jour, pour les meilleures, en priorité basse (nice sous Linux, « inférieure à la normale »
+  sous Windows), pour ne pas gêner l'enregistrement.
 - Si Streamlink s'arrête (coupure, fin du live), on revérifie le live et on relance une nouvelle
-  connexion. Le chat se reconnecte tout seul (ChatLogger).
+  connexion. Le chat se reconnecte tout seul (ChatLogger). Pas de doublon : une candidate trop
+  proche d'une autre de la même chaîne (`live.cooldown`) est ignorée, même après un redémarrage.
 """
 
 from __future__ import annotations
@@ -18,7 +19,6 @@ import copy
 import dataclasses
 import logging
 import os
-import queue
 import shutil
 import subprocess
 import sys
@@ -27,7 +27,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from autoclip import video
+from autoclip import daily
 from autoclip.chat import ChatLogger
 from autoclip.config import Config
 from autoclip.peaks import Peak, detect_peaks
@@ -189,28 +189,56 @@ def _lower_priority() -> None:
         log.warning("Impossible de baisser la priorité du traitement des clips.")
 
 
-def _worker(jobs: queue.Queue) -> None:
-    """Un seul traitement de clip à la fois, toutes chaînes confondues (un seul Whisper en mémoire)."""
-    from autoclip.pipeline import process_peak, upload_clips
+_JOB = None  # garde le handle ouvert tant qu'autoclip vit
 
+
+def _children_die_with_me() -> None:
+    """Windows : autoclip entre dans un Job Object « tuer à la fermeture ». Streamlink et ffmpeg,
+    lancés ensuite, y sont aussi et meurent avec autoclip, même s'il est tué ou plante.
+
+    Testé le 18/11/2026 : sans ça, après un plantage, ils continuaient seuls, gardaient ouvert le
+    journal d'erreurs du superviseur et chaque relance échouait aussitôt.
+    """
+    global _JOB
+    if sys.platform != "win32" or _JOB is not None:
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    class Basic(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD)]
+
+    class Extended(ctypes.Structure):
+        _fields_ = [("BasicLimitInformation", Basic), ("IoInfo", ctypes.c_uint64 * 6),
+                    ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+    k = ctypes.windll.kernel32
+    k.CreateJobObjectW.restype = wintypes.HANDLE
+    k.GetCurrentProcess.restype = wintypes.HANDLE
+    k.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    k.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    job = k.CreateJobObjectW(None, None)
+    info = Extended()
+    info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    ok = job and k.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info))
+    if not (ok and k.AssignProcessToJobObject(job, k.GetCurrentProcess())):
+        log.warning("Job Object impossible : Streamlink/ffmpeg pourraient survivre à un plantage.")
+        return
+    _JOB = job
+
+
+def _selection(cfg: Config, now: datetime) -> None:
+    """Tri quotidien, dans son propre thread, en priorité basse (Whisper + encodage)."""
     _lower_priority()
-    while True:
-        job = jobs.get()
-        if job is None:
-            return
-        cfg = job["cfg"]
-        log.info("Traitement de %s (%d autre(s) en attente)", job["name"], jobs.qsize())
-        try:
-            session = {"video_path": job["raw"], "start_ts": job["start_ts"],
-                       "channel": cfg.twitch.channel, "metadata": job["metadata"]}
-            out = process_peak(cfg, session, video.probe(job["raw"]), job["peak"], 0,
-                               name=job["name"], messages=job["chat"])
-            if out and cfg.tiktok.auto_upload:
-                upload_clips(cfg, [out])
-        except Exception:  # noqa: BLE001 - un clip raté ne doit pas arrêter le mode continu
-            log.exception("Clip %s raté", job["name"])
-        finally:
-            job["raw"].unlink(missing_ok=True)
+    try:
+        daily.run_selection(cfg, now)
+    except Exception:  # noqa: BLE001 - un tri raté ne doit pas arrêter la surveillance
+        log.exception("Tri quotidien raté")
 
 
 def _cut(cfg: Config, rec: Recording, peak: Peak, queue_dir: Path, metadata: dict,
@@ -218,7 +246,7 @@ def _cut(cfg: Config, rec: Recording, peak: Peak, queue_dir: Path, metadata: dic
     """Coupe le pic (heures absolues) depuis le buffer ; renvoie la tâche à mettre en file."""
     name = f"{datetime.fromtimestamp(peak.t_peak):%Y-%m-%d_%Hh%Mm%Ss}_{cfg.twitch.channel}"
     r0, r1 = peak.start - rec.start_ts, peak.end - rec.start_ts  # secondes dans la connexion
-    raw = queue_dir / f"{name}.ts"
+    raw = queue_dir / f"{name}_segments.ts"  # segments entiers, recoupés ensuite (daily.trim_copy)
     offset = cut_segments(rec.segments(), max(r0, 0.0), r1, raw)
     if offset is None:
         log.warning("Pic %s : rien dans le buffer pour ce moment, ignoré.", name)
@@ -242,13 +270,12 @@ def channel_config(cfg: Config, channel: str) -> Config:
     return out
 
 
-def _watch(cfg: Config, jobs: queue.Queue, stop: threading.Event) -> None:
-    """Surveille une chaîne : enregistrement en segments, chat, détection, découpe des pics."""
+def _watch(cfg: Config, status: dict, stop: threading.Event) -> None:
+    """Surveille une chaîne : enregistrement en segments, chat, détection ; chaque pic devient
+    une candidate (clip brut sans réencodage dans candidates/)."""
     ch = cfg.twitch.channel
     root = Path(cfg.paths.recordings) / f"{ch}_buffer"
-    queue_dir = Path(cfg.paths.recordings) / f"{ch}_queue"
     root.mkdir(parents=True, exist_ok=True)
-    queue_dir.mkdir(parents=True, exist_ok=True)
     keep = cfg.live.buffer_minutes * 60
 
     messages: list[dict] = []
@@ -267,6 +294,11 @@ def _watch(cfg: Config, jobs: queue.Queue, stop: threading.Event) -> None:
     try:
         while not stop.is_set():
             now = time.time()
+            with lock:
+                last_msg = messages[-1]["ts"] if messages else None
+            status[ch] = {"en_live": rec is not None, "enregistre": bool(rec and rec.alive()),
+                          "dernier_message_chat": datetime.fromtimestamp(last_msg).isoformat(
+                              timespec="seconds") if last_msg else None}
             if rec and not rec.alive():
                 log.warning("[%s] Enregistrement interrompu (coupure ou fin du live), on relance.", ch)
                 rec.stop()
@@ -297,9 +329,15 @@ def _watch(cfg: Config, jobs: queue.Queue, stop: threading.Event) -> None:
                     if rec is None or rec.start_ts is None:
                         log.warning("[%s] Pas d'enregistrement en cours : pic ignoré.", ch)
                         continue
-                    job = _cut(cfg, rec, peak, queue_dir, metadata, recent)
+                    if daily.is_duplicate(cfg, ch, peak.t_peak):
+                        log.info("[%s] Déjà une candidate pour ce moment : ignoré.", ch)
+                        continue
+                    job = _cut(cfg, rec, peak, daily.candidates_dir(cfg), metadata, recent)
                     if job:
-                        jobs.put(job)
+                        try:
+                            daily.save_candidate(cfg, job, peak)
+                        except Exception:  # noqa: BLE001 - une découpe ratée n'arrête rien
+                            log.exception("[%s] Candidate ratée", ch)
 
             if now >= next_purge:
                 next_purge = now + 60
@@ -314,31 +352,44 @@ def _watch(cfg: Config, jobs: queue.Queue, stop: threading.Event) -> None:
         chat.stop()
 
 
-def run_live(cfg: Config) -> int:
-    """Une surveillance par chaîne (`twitch.channels`), une seule file de clips pour toutes."""
+def run_live(cfg: Config, heartbeat: Path = Path("heartbeat.json")) -> int:
+    """Une surveillance par chaîne (`twitch.channels`) ; tri quotidien, nettoyage et heartbeat
+    dans la boucle principale."""
     channels = cfg.twitch.channels or [cfg.twitch.channel]
-    jobs: queue.Queue = queue.Queue()
-    worker = threading.Thread(target=_worker, args=(jobs,), daemon=True, name="clips")
-    worker.start()
+    _children_die_with_me()
     stop = threading.Event()
-    watchers = [threading.Thread(target=_watch, args=(channel_config(cfg, ch), jobs, stop),
+    status: dict = {}
+    watchers = [threading.Thread(target=_watch, args=(channel_config(cfg, ch), status, stop),
                                  daemon=True, name=f"live-{ch}") for ch in channels]
-    log.info("Mode continu sur : %s", ", ".join(channels))
+    log.info("Mode continu sur : %s ; tri quotidien à %s (%d clips max)", ", ".join(channels),
+             cfg.daily.selection_time, cfg.daily.max_clips_per_day)
     for w in watchers:
         w.start()
+    selecting: threading.Thread | None = None
+    next_beat = next_clean = 0.0
     code = 0
     try:
         while all(w.is_alive() for w in watchers):
+            now = datetime.now()
+            if (selecting is None or not selecting.is_alive()) and daily.selection_due(cfg, now):
+                selecting = threading.Thread(target=_selection, args=(cfg, now), name="tri")
+                selecting.start()
+            if time.time() >= next_clean:
+                next_clean = time.time() + 600
+                daily.cleanup(cfg, now)
+            if time.time() >= next_beat:
+                next_beat = time.time() + 60
+                daily.write_heartbeat(heartbeat, dict(status), daily.next_selection(cfg, now))
             time.sleep(1)
-        # Une chaîne a planté : on s'arrête, la tâche planifiée relance tout.
+        # Une chaîne a planté : on s'arrête, le superviseur relance tout.
         log.error("Une surveillance s'est arrêtée sur une erreur (voir plus haut) : arrêt.")
         code = 1
     except KeyboardInterrupt:
-        log.info("Arrêt demandé. Les clips déjà coupés vont être terminés (Ctrl+C à nouveau pour "
-                 "quitter tout de suite).")
+        log.info("Arrêt demandé.")
     stop.set()
     for w in watchers:
         w.join()
-    jobs.put(None)
-    worker.join()
+    if selecting is not None and selecting.is_alive():
+        log.info("Fin du tri en cours avant de quitter…")
+        selecting.join()
     return code

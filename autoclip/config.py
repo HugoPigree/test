@@ -27,6 +27,7 @@ class TwitchConfig:
 class PathsConfig:
     recordings: str = "recordings"
     export: str = "ready_to_post"
+    candidates: str = "candidates"  # mode continu : clips bruts en attente du tri quotidien
 
 
 @dataclass
@@ -156,6 +157,17 @@ class LiveConfig:
 
 
 @dataclass
+class DailyConfig:
+    # Mode continu : les pics deviennent des candidates ; une fois par jour, à `selection_time`,
+    # seules les meilleures sont rendues dans ready_to_post/AAAA-MM-JJ/.
+    max_clips_per_day: int = 5
+    min_gap_minutes: float = 20.0   # entre deux clips retenus d'une même chaîne
+    selection_time: str = "23:00"   # heure du tri (HH:MM, heure du PC)
+    retention_hours: float = 48.0   # candidates supprimées après ce délai
+    max_disk_gb: float = 20.0       # taille max de candidates/ (les moins bonnes partent d'abord)
+
+
+@dataclass
 class MusicConfig:
     # Musique de fond prise au hasard dans `dir`, un peu baissée quand quelqu'un parle.
     enabled: bool = True
@@ -210,6 +222,7 @@ class Config:
     context: ContextConfig = field(default_factory=ContextConfig)
     music: MusicConfig = field(default_factory=MusicConfig)
     live: LiveConfig = field(default_factory=LiveConfig)
+    daily: DailyConfig = field(default_factory=DailyConfig)
     tiktok: TikTokConfig = field(default_factory=TikTokConfig)
     top: TopConfig = field(default_factory=TopConfig)
 

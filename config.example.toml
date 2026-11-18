@@ -16,6 +16,7 @@ poll_interval = 60      # secondes entre deux vérifications "est-ce qu'il est e
 [paths]
 recordings = "recordings"   # enregistrements bruts et buffer du mode continu
 export = "ready_to_post"    # clips finis, un dossier par clip
+candidates = "candidates"   # mode continu : clips bruts en attente du tri quotidien
 
 [detection]
 window = 10.0           # fenêtre d'activité du chat (s)
@@ -109,6 +110,15 @@ level_db = -26.0        # dB sous le son du live (-24 plus présente, -28 à pei
 segment_seconds = 300
 buffer_minutes = 45
 cooldown = 90           # secondes minimum entre les pics de deux clips (anti-doublon)
+
+[daily]
+# Mode continu avec quota : chaque pic devient une candidate (clip brut dans `candidates/`) ;
+# une fois par jour, seules les meilleures sont rendues dans ready_to_post/AAAA-MM-JJ/.
+max_clips_per_day = 5   # clips gardés par jour (toutes chaînes confondues)
+min_gap_minutes = 20    # écart minimal entre deux clips retenus d'une même chaîne
+selection_time = "23:00"  # heure du tri (heure du PC) ; rattrapé au redémarrage si manqué
+retention_hours = 48    # les candidates non retenues sont supprimées après ce délai
+max_disk_gb = 20        # taille max de candidates/ (les moins bonnes sont supprimées d'abord)
 
 [top]
 # `autoclip top --lang fr --count 3` : top des clips Twitch des dernières 24 h (API Twitch).

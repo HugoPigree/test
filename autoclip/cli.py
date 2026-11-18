@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import logging.handlers
 import shutil
 import sys
 import threading
@@ -223,10 +224,13 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_check)
 
     args = parser.parse_args(argv)
+    # Journal tournant : 5 Mo par fichier, 5 anciens gardés (autoclip.log.1 … .5).
+    rotating = logging.handlers.RotatingFileHandler("autoclip.log", maxBytes=5_000_000,
+                                                    backupCount=5, encoding="utf-8")
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)-7s %(message)s", datefmt="%H:%M:%S",
-        handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler("autoclip.log", encoding="utf-8")],
+        format="%(asctime)s %(levelname)-7s %(message)s", datefmt="%Y-%m-%d %H:%M:%S",
+        handlers=[logging.StreamHandler(sys.stdout), rotating],
     )
     cfg = load_config(args.config)
     if args.channel:

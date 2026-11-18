@@ -27,7 +27,7 @@ chat IRC   ──► recordings/<session>/chat.jsonl ┴─► pics de chat ─�
 
 | Commande | Effet |
 |---|---|
-| `autoclip live` | **Mode continu**, pour un live qui ne s'arrête jamais (subathon) : enregistre en segments de 5 min en ne gardant que les 45 dernières minutes, analyse le chat en continu et coupe chaque clip pendant le live. Les clips sont traités un par un en priorité basse. Se relance tout seul après une coupure du stream ou du chat. Ctrl+C = arrêt, les clips déjà coupés sont terminés. |
+| `autoclip live` | **Mode continu avec quota**, pour un live qui ne s'arrête jamais (subathon) : enregistre en segments de 5 min (45 dernières minutes gardées), analyse le chat en continu ; chaque pic devient une **candidate** (clip brut coupé sans réencodage dans `candidates/`). Chaque jour à `[daily] selection_time` (23:00), les `max_clips_per_day` (5) meilleures, espacées d'au moins `min_gap_minutes` (20) sur une même chaîne, sont rendues dans `ready_to_post/AAAA-MM-JJ/` avec un `classement.md` (rang, score, durée, accroche, pourquoi). Les autres sont supprimées après `retention_hours` (48 h) et `candidates/` reste sous `max_disk_gb` (20 Go). Reconnexion du stream et du chat, pas de doublon même après un redémarrage. `heartbeat.json` est mis à jour chaque minute ; journal `autoclip.log` tournant (5 Mo × 5). |
 | `autoclip watch` | Attend que JLTomy lance son live, enregistre vidéo + chat, et génère les clips à la fin du live. Tourne en boucle. Ctrl+C = arrêt propre, la session en cours est quand même traitée. |
 | `autoclip record --duration 600 --process` | Enregistre 10 min maintenant puis traite la session (pratique pour tester pendant un live). |
 | `autoclip top --lang fr --count 3` | Top 3 des clips Twitch français des dernières 24 h (API Twitch), prêts à poster dans `ready_to_post/top_AAAA-MM-JJ_NN/`. Voir « Top des clips Twitch du jour ». |
@@ -157,15 +157,17 @@ powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1
 powershell -ExecutionPolicy Bypass -File scripts\install_task.ps1
 ```
 
-Ça crée la tâche planifiée `autoclip` : `autoclip live` démarre avec le PC, même sans session
-ouverte, et repart dans les 5 min s'il s'arrête. Le traitement des clips tourne en priorité
-« inférieure à la normale », Streamlink et l'enregistrement en priorité normale.
+Ça crée la tâche planifiée `autoclip` : au démarrage du PC, même sans session ouverte, elle lance
+le superviseur `scripts\run_autoclip.ps1`, qui lance `autoclip live` et le relance s'il s'arrête,
+avec un délai croissant (30 s, 1 min, 2 min… 15 min max ; repart à 30 s après 1 h sans arrêt).
+La tâche relance aussi le superviseur toutes les 5 min s'il a disparu. Le tri quotidien tourne en
+priorité « inférieure à la normale », Streamlink et l'enregistrement en priorité normale.
 
-- Voir : `Get-ScheduledTask autoclip | Get-ScheduledTaskInfo`, journal `autoclip.log`, plantages
-  dans `autoclip-erreurs.log`.
-- Arrêter : `Disable-ScheduledTask autoclip; Stop-ScheduledTask autoclip`. C'est un arrêt sec :
-  les clips en file d'attente ne sont pas terminés. Pour un arrêt propre, lancer plutôt
-  `.venv\Scripts\autoclip live` à la main dans un terminal et faire Ctrl+C.
+- Voir : `heartbeat.json` (mis à jour chaque minute : s'il a plus de 2 min, autoclip ne tourne
+  plus), journal `autoclip.log` (+ `.1` à `.5`), relances dans `autoclip-superviseur.log`,
+  plantages Python dans `autoclip-erreurs.log`, `Get-ScheduledTask autoclip | Get-ScheduledTaskInfo`.
+- Arrêter : `Disable-ScheduledTask autoclip; Stop-ScheduledTask autoclip`. C'est un arrêt sec ;
+  les candidates déjà coupées restent, et un tri interrompu est refait au prochain lancement.
 - Relancer : `Enable-ScheduledTask autoclip; Start-ScheduledTask autoclip`.
 - Après une mise à jour du code : `git pull`, `scripts\setup_windows.ps1`, puis arrêter et relancer.
 
