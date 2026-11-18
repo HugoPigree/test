@@ -38,7 +38,9 @@ def is_live(cfg: Config) -> tuple[bool, dict]:
     """Interroge Streamlink en JSON : renvoie (en_live, métadonnées)."""
     cmd = _streamlink_cmd() + _twitch_args(cfg) + ["--json", channel_url(cfg)]
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        # Streamlink écrit du JSON en UTF-8 ; sans `encoding`, Windows le lit en cp1252 (« Ã  »).
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=60)
         data = json.loads(proc.stdout or "{}")
     except (subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
         log.warning("Vérification du live impossible : %s", exc)
