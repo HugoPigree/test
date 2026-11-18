@@ -2,7 +2,8 @@
 
 ## But
 
-Surveiller **une seule** chaîne Twitch (`jltomy`), détecter les pics d'activité du chat, et en faire
+Surveiller les chaînes Twitch `jltomy` et `etostark__` (Etostark, ajoutée le 18/11/2026, « mêmes
+règles »), détecter les pics d'activité du chat, et en faire
 des clips verticaux 1080x1920 sous-titrés (Whisper en français, mot courant surligné), rangés dans
 `ready_to_post/<clip>/` pour TikTok. L'upload TikTok se fait **en brouillon** via l'API officielle
 (Content Posting API, mode `inbox`) : c'est la dernière étape. L'utilisateur poste ensuite les
@@ -53,7 +54,11 @@ brouillons depuis son téléphone.
 
 ## Décisions prises
 
-- Une seule chaîne pour l'instant : JLTomy.
+- Deux chaînes depuis le 18/11/2026 : JLTomy et Etostark (`etostark__` ; `etostark` n'existe
+  pas). Mêmes règles pour les deux (`[twitch] channels`). Un seul process `autoclip live` : un
+  thread par chaîne (`live._watch` : enregistrement, chat, détection, découpe) et **une seule file
+  de clips** (`live._worker`) pour ne charger qu'un Whisper et n'encoder qu'un clip à la fois.
+  Si une chaîne plante, `run_live` s'arrête (code 1) et la tâche planifiée relance tout.
 - Son stream ne s'arrête jamais (subathon). Le traitement « à la fin du live » (`watch`) ne sert donc
   à rien : on utilise le **mode continu** `autoclip live` (segments, buffer de 45 min max, file
   d'attente traitée en `nice`).
@@ -79,7 +84,7 @@ brouillons depuis son téléphone.
 | `autoclip/video.py` | ffprobe / ffmpeg : 9:16 (`blur` / `crop` / `split`), zoom au pic, musique (sidechaincompress), miniature. |
 | `autoclip/subtitles.py` | faster-whisper (`hotwords` = vocabulaire + titre du live, puis `fixes`), recollage des élisions, ASS : mot qui « saute », titre qui rebondit, chat qui défile en bas à gauche (`pick_chat`). |
 | `autoclip/context.py` | Titre, légende, hashtags et corrections de mots écrits par Claude via `claude -p --model haiku --tools "" --json-schema …` (abonnement Claude de l'utilisateur, pas de clé API), lancé dans un dossier vide. Si Claude manque ou échoue : `None`, et le pipeline reprend l'ancienne accroche. |
-| `autoclip/live.py` | Mode continu : `streamlink --stdout` → `ffmpeg -f segment` (MPEG-TS), purge du buffer, détection toutes les 5 s, découpe depuis les segments, file + thread en nice 10. |
+| `autoclip/live.py` | Mode continu : un thread `_watch` par chaîne (`streamlink --stdout` → `ffmpeg -f segment` en MPEG-TS, purge du buffer, détection toutes les 5 s, découpe depuis les segments) et un seul `_worker` pour toutes les chaînes, en priorité basse. Chaque tâche de la file emporte la config de sa chaîne (`channel_config`). |
 | `autoclip/tiktok.py` | OAuth + Content Posting API (`inbox` / `direct`). **Jamais testé en vrai.** |
 | `scripts/setup_server.sh` | Installation idempotente, sans sudo (venv, dépendances, modèle Whisper, config, check). |
 | `scripts/run_tmux.sh` | Lance `autoclip live` (par défaut) dans la session tmux `autoclip`. |
@@ -239,4 +244,8 @@ Plus tard seulement : source YouTube via yt-dlp ; séparation en « sources » +
 - **Droits** : vérifier que JLTomy autorise les comptes de clips avant de poster.
 - **Pubs Twitch** : sans compte sub/Turbo, Streamlink saute les pubs et ça laisse des trous dans la
   vidéo. Renseigner `twitch.oauth_token` dans `config.toml` (jamais dans le repo).
-- **Disque** : 2,5 à 3,5 Go par heure pour `record` / `watch`. Le mode `live` reste borné (~3 Go).
+- **Disque** : 2,5 à 3,5 Go par heure pour `record` / `watch`. Le mode `live` reste borné (~3 Go
+  par chaîne, donc ~6 Go avec JLTomy + Etostark).
+- **Deux chaînes en même temps** : deux flux 1080p60 téléchargés en continu (débit réseau non
+  mesuré) ; si les deux chats s'emballent ensemble, la file de clips grossit (un clip à la fois).
+  `autoclip live` à deux chaînes n'a **pas encore tourné pour de vrai** (seulement les tests).

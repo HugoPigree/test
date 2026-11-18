@@ -4,7 +4,9 @@
 # (ignoré par git) ou dans les variables d'environnement indiquées.
 
 [twitch]
-channel = "jltomy"      # chaîne surveillée (une seule)
+# Chaînes surveillées par `autoclip live`, mêmes règles pour toutes, une seule file de clips
+# (un clip traité à la fois). La première sert aussi à record / watch / check.
+channels = ["jltomy", "etostark__"]
 quality = "1080p60,1080p,720p60,720p,best"  # qualités par ordre de préférence (syntaxe Streamlink)
 # Token d'un compte sub/Turbo (cookie "auth-token" de twitch.tv) => pas de pubs, donc pas de trous
 # dans la vidéo. Secret : à mettre dans config.toml ou dans la variable TWITCH_OAUTH_TOKEN.
@@ -65,7 +67,7 @@ outline = 6             # épaisseur du contour
 margin_v = 560          # distance des sous-titres depuis le bas (pixels sur 1920)
 # Mots que Whisper doit savoir écrire (argot, mots arabes, anglicismes, noms). Le titre du live
 # est ajouté tout seul. Trop de mots peut faire « entendre » ces mots là où ils ne sont pas.
-vocabulary = "JLTomy wesh wallah starfoullah hamdoulah inchallah mashallah wallahi frérot le sang zehef tiep bsahtek miskine hagra chouf sah wsh gros frr bro chill flex clutch rage stream subathon donation sub follow GTA Miami IRL"
+vocabulary = "JLTomy Etostark Stark wesh wallah starfoullah hamdoulah inchallah mashallah wallahi frérot le sang zehef tiep bsahtek miskine hagra chouf sah wsh gros frr bro chill flex clutch rage stream subathon donation sub follow GTA Miami IRL"
 
 [subtitles.fixes]       # corrections forcées après Whisper (mot entier, majuscules ignorées)
 walla = "wallah"
@@ -89,7 +91,7 @@ title_max_chars = 50
 
 [export]
 # {caption} et {hashtags} viennent de Claude (sans Claude : {caption} = l'accroche, {hashtags} vide).
-caption_template = "{caption} {hashtags} #jltomy #twitchfr #fyp #pourtoi"
+caption_template = "{caption} {hashtags} #{channel_tag} #twitchfr #fyp #pourtoi"  # {channel_tag} : #jltomy, #etostark
 hook_max_chars = 60     # longueur max de l'accroche
 hook_duration = 60.0    # titre incrusté en haut pendant N s (0 = aucun, 60 = tout le clip)
 chat_overlay = 4        # messages du chat incrustés en bas à partir du pic (0 = aucun)

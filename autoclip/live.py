@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import logging
 import os
@@ -182,7 +183,8 @@ def _lower_priority() -> None:
         log.warning("Impossible de baisser la priorité du traitement des clips.")
 
 
-def _worker(cfg: Config, jobs: queue.Queue) -> None:
+def _worker(jobs: queue.Queue) -> None:
+    """Un seul traitement de clip à la fois, toutes chaînes confondues (un seul Whisper en mémoire)."""
     from autoclip.pipeline import process_peak, upload_clips
 
     _lower_priority()
@@ -190,6 +192,7 @@ def _worker(cfg: Config, jobs: queue.Queue) -> None:
         job = jobs.get()
         if job is None:
             return
+        cfg = job["cfg"]
         log.info("Traitement de %s (%d autre(s) en attente)", job["name"], jobs.qsize())
         try:
             session = {"video_path": job["raw"], "start_ts": job["start_ts"],
@@ -223,12 +226,21 @@ def _cut(cfg: Config, rec: Recording, peak: Peak, queue_dir: Path, metadata: dic
         return None
     chat = [m for m in messages if peak.start - 5 <= m["ts"] <= peak.end + 5]
     return {"name": name, "raw": raw, "peak": clip, "start_ts": rec.start_ts + offset,
-            "metadata": metadata, "chat": chat}
+            "metadata": metadata, "chat": chat, "cfg": cfg}
 
 
-def run_live(cfg: Config) -> None:
-    root = Path(cfg.paths.recordings) / f"{cfg.twitch.channel}_buffer"
-    queue_dir = Path(cfg.paths.recordings) / f"{cfg.twitch.channel}_queue"
+def channel_config(cfg: Config, channel: str) -> Config:
+    """Même config (mêmes règles), autre chaîne."""
+    out = copy.deepcopy(cfg)
+    out.twitch.channel = channel
+    return out
+
+
+def _watch(cfg: Config, jobs: queue.Queue, stop: threading.Event) -> None:
+    """Surveille une chaîne : enregistrement en segments, chat, détection, découpe des pics."""
+    ch = cfg.twitch.channel
+    root = Path(cfg.paths.recordings) / f"{ch}_buffer"
+    queue_dir = Path(cfg.paths.recordings) / f"{ch}_queue"
     root.mkdir(parents=True, exist_ok=True)
     queue_dir.mkdir(parents=True, exist_ok=True)
     keep = cfg.live.buffer_minutes * 60
@@ -240,21 +252,17 @@ def run_live(cfg: Config) -> None:
         with lock:
             messages.append(msg)
 
-    chat = ChatLogger(cfg.twitch.channel, None, on_message=on_message)
+    chat = ChatLogger(ch, None, on_message=on_message)
     chat.start()
-    jobs: queue.Queue = queue.Queue()
-    worker = threading.Thread(target=_worker, args=(cfg, jobs), daemon=True, name="clips")
-    worker.start()
-
     rec: Recording | None = None
     metadata: dict = {}
     last_clip = 0.0
     next_live_check = next_detect = next_purge = 0.0
     try:
-        while True:
+        while not stop.is_set():
             now = time.time()
             if rec and not rec.alive():
-                log.warning("Enregistrement interrompu (coupure ou fin du live), on relance.")
+                log.warning("[%s] Enregistrement interrompu (coupure ou fin du live), on relance.", ch)
                 rec.stop()
                 rec = None
                 next_live_check = now
@@ -262,11 +270,10 @@ def run_live(cfg: Config) -> None:
                 live, meta = is_live(cfg)
                 if live:
                     metadata = meta
-                    log.info("%s est en live : %s", cfg.twitch.channel, meta.get("title", ""))
+                    log.info("[%s] En live : %s", ch, meta.get("title", ""))
                     rec = Recording(cfg, root)
                 else:
-                    log.info("%s hors ligne, nouvel essai dans %ss.", cfg.twitch.channel,
-                             cfg.twitch.poll_interval)
+                    log.info("[%s] Hors ligne, nouvel essai dans %ss.", ch, cfg.twitch.poll_interval)
                     next_live_check = now + cfg.twitch.poll_interval
             if rec:
                 rec.tick()
@@ -278,10 +285,11 @@ def run_live(cfg: Config) -> None:
                     recent = list(messages)
                 for peak in ready_peaks(cfg, recent, now, last_clip):
                     last_clip = peak.t_peak
-                    log.info("Pic de chat à %s (score %.1f) : %s", datetime.fromtimestamp(peak.t_peak)
-                             .strftime("%H:%M:%S"), peak.score, " | ".join(peak.sample[:3])[:80])
+                    log.info("[%s] Pic de chat à %s (score %.1f) : %s", ch,
+                             datetime.fromtimestamp(peak.t_peak).strftime("%H:%M:%S"), peak.score,
+                             " | ".join(peak.sample[:3])[:80])
                     if rec is None or rec.start_ts is None:
-                        log.warning("Pas d'enregistrement en cours : pic ignoré.")
+                        log.warning("[%s] Pas d'enregistrement en cours : pic ignoré.", ch)
                         continue
                     job = _cut(cfg, rec, peak, queue_dir, metadata, recent)
                     if job:
@@ -290,13 +298,41 @@ def run_live(cfg: Config) -> None:
             if now >= next_purge:
                 next_purge = now + 60
                 purge(root, keep, rec.dir if rec else None)
-            time.sleep(1)
-    except KeyboardInterrupt:
-        log.info("Arrêt demandé. Les clips déjà coupés vont être terminés (Ctrl+C à nouveau pour "
-                 "quitter tout de suite).")
+            stop.wait(1)
+    except Exception:
+        log.exception("[%s] Surveillance arrêtée sur une erreur", ch)
+        raise
     finally:
         if rec:
             rec.stop()
         chat.stop()
+
+
+def run_live(cfg: Config) -> int:
+    """Une surveillance par chaîne (`twitch.channels`), une seule file de clips pour toutes."""
+    channels = cfg.twitch.channels or [cfg.twitch.channel]
+    jobs: queue.Queue = queue.Queue()
+    worker = threading.Thread(target=_worker, args=(jobs,), daemon=True, name="clips")
+    worker.start()
+    stop = threading.Event()
+    watchers = [threading.Thread(target=_watch, args=(channel_config(cfg, ch), jobs, stop),
+                                 daemon=True, name=f"live-{ch}") for ch in channels]
+    log.info("Mode continu sur : %s", ", ".join(channels))
+    for w in watchers:
+        w.start()
+    code = 0
+    try:
+        while all(w.is_alive() for w in watchers):
+            time.sleep(1)
+        # Une chaîne a planté : on s'arrête, la tâche planifiée relance tout.
+        log.error("Une surveillance s'est arrêtée sur une erreur (voir plus haut) : arrêt.")
+        code = 1
+    except KeyboardInterrupt:
+        log.info("Arrêt demandé. Les clips déjà coupés vont être terminés (Ctrl+C à nouveau pour "
+                 "quitter tout de suite).")
+    stop.set()
+    for w in watchers:
+        w.join()
     jobs.put(None)
     worker.join()
+    return code

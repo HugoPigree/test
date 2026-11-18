@@ -11,6 +11,9 @@ from typing import Any
 
 @dataclass
 class TwitchConfig:
+    # Chaînes surveillées par `autoclip live` (mêmes règles pour toutes). La première sert aussi
+    # aux commandes à une seule chaîne (record, watch, check…). Vide = [channel].
+    channels: list[str] = field(default_factory=list)
     channel: str = "jltomy"
     # Liste de qualités par ordre de préférence (syntaxe Streamlink).
     quality: str = "1080p60,1080p,720p60,720p,best"
@@ -104,7 +107,7 @@ class SubtitlesConfig:
     margin_v: int = 560
     # Mots que Whisper doit savoir écrire (argot, mots arabes, anglicismes, noms) : passés en
     # « hotwords » à chaque fenêtre de 30 s. Le titre du live est ajouté automatiquement.
-    vocabulary: str = ("JLTomy wesh wallah starfoullah hamdoulah inchallah mashallah wallahi "
+    vocabulary: str = ("JLTomy Etostark Stark wesh wallah starfoullah hamdoulah inchallah mashallah wallahi "
                        "frérot le sang zehef tiep bsahtek miskine hagra chouf sah wsh gros "
                        "frr bro chill flex clutch rage stream subathon donation sub follow "
                        "GTA Miami IRL")
@@ -130,8 +133,9 @@ class ContextConfig:
 @dataclass
 class ExportConfig:
     # {caption} et {hashtags} viennent de Claude ; sans Claude, {caption} = l'accroche et
-    # {hashtags} est vide. Aussi disponibles : {hook}, {channel}, {title} (titre du live).
-    caption_template: str = "{caption} {hashtags} #jltomy #twitchfr #fyp #pourtoi"
+    # {hashtags} est vide. {channel_tag} = la chaîne sans « _ » au bout (#etostark).
+    # Aussi disponibles : {hook}, {channel}, {title} (titre du live).
+    caption_template: str = "{caption} {hashtags} #{channel_tag} #twitchfr #fyp #pourtoi"
     hook_max_chars: int = 60
     # Titre incrusté en haut pendant les N premières secondes (0 = aucun, 60 = tout le clip).
     hook_duration: float = 60.0
@@ -217,5 +221,10 @@ def load_config(path: str | Path | None = None) -> Config:
     cfg.tiktok.client_key = os.environ.get("TIKTOK_CLIENT_KEY", cfg.tiktok.client_key)
     cfg.tiktok.client_secret = os.environ.get("TIKTOK_CLIENT_SECRET", cfg.tiktok.client_secret)
     cfg.twitch.oauth_token = os.environ.get("TWITCH_OAUTH_TOKEN", cfg.twitch.oauth_token)
-    cfg.twitch.channel = cfg.twitch.channel.lower().lstrip("#")
+    set_channels(cfg, cfg.twitch.channels or [cfg.twitch.channel])
     return cfg
+
+
+def set_channels(cfg: Config, channels: list[str]) -> None:
+    cfg.twitch.channels = [c.lower().lstrip("#") for c in channels]
+    cfg.twitch.channel = cfg.twitch.channels[0]

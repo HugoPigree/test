@@ -1,6 +1,6 @@
 # twitch-autoclip
 
-Enregistre le live Twitch de **JLTomy**, repère les moments où le chat s'emballe, découpe ces passages, les recadre en vertical 9:16, ajoute des sous-titres Whisper façon TikTok et range le tout dans `ready_to_post/`. L'upload TikTok est la dernière étape (optionnelle).
+Enregistre les lives Twitch de **JLTomy** et d'**Etostark** (`etostark__`), repère les moments où le chat s'emballe, découpe ces passages, les recadre en vertical 9:16, ajoute des sous-titres Whisper façon TikTok et range le tout dans `ready_to_post/`. L'upload TikTok est la dernière étape (optionnelle).
 
 ```
 streamlink ──► recordings/<session>/stream.ts ─┐
@@ -35,7 +35,9 @@ chat IRC   ──► recordings/<session>/chat.jsonl ┴─► pics de chat ─�
 | `autoclip tiktok-auth` | Connecte ton compte TikTok (une fois). |
 | `autoclip upload` | Envoie sur TikTok tous les clips pas encore uploadés. |
 
-`--channel autrechaine` permet de cibler une autre chaîne pour tester.
+**Plusieurs chaînes** : `autoclip live` surveille toutes les chaînes de `[twitch] channels` (par défaut `["jltomy", "etostark__"]`) avec les mêmes règles. Chaque chaîne a son enregistrement, son chat et son buffer (`recordings/<chaîne>_buffer/`, ~3 Go chacun), mais il n'y a **qu'une file de clips** : un seul clip traité à la fois et un seul Whisper en mémoire, pour ménager le PC. Les clips portent le nom de leur chaîne et le hashtag qui va avec (`#jltomy`, `#etostark`). Les autres commandes (`record`, `watch`…) prennent la première chaîne de la liste.
+
+`--channel autrechaine` permet de cibler une seule autre chaîne pour tester.
 
 ### Ce qu'il y a dans chaque dossier de `ready_to_post/`
 

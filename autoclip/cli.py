@@ -9,7 +9,7 @@ import sys
 import threading
 from pathlib import Path
 
-from autoclip.config import Config, load_config
+from autoclip.config import Config, load_config, set_channels
 
 log = logging.getLogger("autoclip")
 
@@ -57,8 +57,7 @@ def cmd_watch(cfg: Config, args) -> int:
 def cmd_live(cfg: Config, args) -> int:
     from autoclip.live import run_live
 
-    run_live(cfg)
-    return 0
+    return run_live(cfg)
 
 
 def _latest_session(cfg: Config) -> Path | None:
@@ -141,7 +140,7 @@ def cmd_check(cfg: Config, args) -> int:
         ok &= good
         print(f"  [{'OK' if good else '!!'}] {label}" + (f"  → {hint}" if hint and not good else ""))
 
-    print(f"Chaîne : {cfg.twitch.channel}")
+    print(f"Chaîne(s) : {', '.join(cfg.twitch.channels or [cfg.twitch.channel])}")
     line(bool(shutil.which("ffmpeg")) and bool(shutil.which("ffprobe")), "ffmpeg / ffprobe",
          "installe ffmpeg et ajoute-le au PATH")
     try:
@@ -160,9 +159,11 @@ def cmd_check(cfg: Config, args) -> int:
              "renseigne [tiktok] client_key / client_secret")
         line(Path(cfg.tiktok.token_file).exists(), "token TikTok", "autoclip tiktok-auth")
     if args.live:
+        from autoclip.live import channel_config
         from autoclip.recorder import is_live
-        live, meta = is_live(cfg)
-        print(f"  [..] {cfg.twitch.channel} est {'EN LIVE : ' + meta.get('title', '') if live else 'hors ligne'}")
+        for ch in cfg.twitch.channels or [cfg.twitch.channel]:
+            live, meta = is_live(channel_config(cfg, ch))
+            print(f"  [..] {ch} est {'EN LIVE : ' + meta.get('title', '') if live else 'hors ligne'}")
     return 0 if ok else 1
 
 
@@ -215,5 +216,5 @@ def main(argv: list[str] | None = None) -> int:
     )
     cfg = load_config(args.config)
     if args.channel:
-        cfg.twitch.channel = args.channel.lower().lstrip("#")
+        set_channels(cfg, [args.channel])
     return args.func(cfg, args)

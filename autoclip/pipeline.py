@@ -64,11 +64,21 @@ def make_hook(cfg: Config, words: list[subtitles.Word], peak: Peak, stream_title
     return _shorten(stream_title, cfg.export.hook_max_chars)
 
 
+def channel_tag(cfg: Config) -> str:
+    """Hashtag de la chaîne : « etostark__ » -> « etostark »."""
+    return cfg.twitch.channel.strip("_")
+
+
+def fixed_hashtags(cfg: Config) -> list[str]:
+    """Hashtags toujours mis par le modèle de légende (Claude ne doit pas les répéter)."""
+    return re.findall(r"#(\w+)", cfg.export.caption_template.replace("{channel_tag}", channel_tag(cfg)))
+
+
 def make_caption(cfg: Config, hook: str, stream_title: str, ctx: dict | None = None) -> str:
     tags = " ".join(f"#{h}" for h in ctx["hashtags"]) if ctx else ""
     text = cfg.export.caption_template.format(
         hook=hook, caption=ctx["caption"] if ctx else hook, hashtags=tags,
-        channel=cfg.twitch.channel, title=stream_title)
+        channel=cfg.twitch.channel, channel_tag=channel_tag(cfg), title=stream_title)
     return " ".join(text.split())
 
 
@@ -119,9 +129,10 @@ def process_peak(cfg: Config, session: dict, meta: dict, peak: Peak, index: int,
             wav.unlink(missing_ok=True)
 
     chat = clip_chat(cfg, session, peak, messages or [])
-    fixed_tags = re.findall(r"#(\w+)", cfg.export.caption_template)
-    ctx = context.describe(cfg.context, cfg.twitch.channel, stream_title,
-                           subtitles.transcript_text(words), chat[:150], fixed_tags)
+    # Nom du streameur tel qu'il l'écrit (« JLTomy », « Etostark »), sinon le nom de la chaîne.
+    streamer = ((session.get("metadata") or {}).get("author") or cfg.twitch.channel).strip("_")
+    ctx = context.describe(cfg.context, streamer, stream_title,
+                           subtitles.transcript_text(words), chat[:150], fixed_hashtags(cfg))
     if ctx:
         words = subtitles.apply_fixes(words, ctx["fixes"])
         hook = _shorten(ctx["title"], cfg.export.hook_max_chars)

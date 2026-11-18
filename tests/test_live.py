@@ -1,11 +1,15 @@
 import os
+import queue
 import subprocess
+import threading
 import time
 
 import pytest
 
-from autoclip.config import Config
+from autoclip import live, pipeline
+from autoclip.config import Config, load_config
 from autoclip.live import PTS_WRAP, VIDEO_MARGIN, _start_time, cut_segments, purge, ready_peaks
+from autoclip.peaks import Peak
 
 from conftest import BURSTS, START_TS, synthetic_chat
 
@@ -91,3 +95,64 @@ def test_cooldown_blocks_a_second_clip_of_the_same_moment():
     cfg.live.cooldown = 20
     cfg.detection.min_gap = 20
     assert len(ready_peaks(cfg, msgs, now, last_clip)) == 2
+
+
+def test_channels_from_config(tmp_path):
+    path = tmp_path / "c.toml"
+    path.write_text('[twitch]\nchannels = ["JLTomy", "#Etostark__"]\n', encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.twitch.channels == ["jltomy", "etostark__"] and cfg.twitch.channel == "jltomy"
+    path.write_text('[twitch]\nchannel = "gotaga"\n', encoding="utf-8")
+    assert load_config(path).twitch.channels == ["gotaga"]  # ancienne config à une chaîne
+
+
+def test_each_channel_keeps_its_own_config_and_hashtag():
+    cfg = Config()
+    eto = live.channel_config(cfg, "etostark__")
+    assert eto.twitch.channel == "etostark__" and cfg.twitch.channel == "jltomy"
+    assert eto.detection == cfg.detection  # mêmes règles
+    eto.detection.threshold = 9
+    assert cfg.detection.threshold != 9    # copie indépendante
+    assert pipeline.fixed_hashtags(eto) == ["etostark", "twitchfr", "fyp", "pourtoi"]
+    assert pipeline.make_caption(eto, "Il a dit oui", "titre").endswith("#etostark #twitchfr #fyp #pourtoi")
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_run_live_watches_every_channel_with_one_clip_queue(monkeypatch):
+    seen, queues = [], set()
+
+    def fake_watch(cfg, jobs, stop):
+        seen.append(cfg.twitch.channel)
+        queues.add(id(jobs))
+        if cfg.twitch.channel == "etostark__":
+            raise RuntimeError("panne simulée")  # une chaîne plante => tout s'arrête (code 1)
+        stop.wait(10)
+
+    monkeypatch.setattr(live, "_watch", fake_watch)
+    cfg = Config()
+    cfg.twitch.channels = ["jltomy", "etostark__"]
+    assert live.run_live(cfg) == 1
+    assert sorted(seen) == ["etostark__", "jltomy"] and len(queues) == 1
+
+
+def test_worker_processes_each_clip_with_its_channel(monkeypatch, tmp_path):
+    done = []
+    monkeypatch.setattr(live, "_lower_priority", lambda: None)
+    monkeypatch.setattr(live.video, "probe", lambda path: {})
+    monkeypatch.setattr(pipeline, "process_peak",
+                        lambda cfg, session, meta, peak, i, name, messages: done.append(
+                            (cfg.twitch.channel, session["channel"], name, len(messages))))
+    jobs = queue.Queue()
+    peak = Peak(t_peak=30, start=0, end=36, score=5, activity=20, baseline=3, n_messages=10)
+    for ch in ["jltomy", "etostark__"]:
+        raw = tmp_path / f"{ch}.ts"
+        raw.write_bytes(b"x")
+        jobs.put({"name": ch, "raw": raw, "peak": peak, "start_ts": 0.0, "metadata": {},
+                  "chat": [{"ts": 1.0, "user": "a", "msg": "KEKW"}],
+                  "cfg": live.channel_config(Config(), ch)})
+    jobs.put(None)
+    t = threading.Thread(target=live._worker, args=(jobs,))
+    t.start()
+    t.join(10)
+    assert done == [("jltomy", "jltomy", "jltomy", 1), ("etostark__", "etostark__", "etostark__", 1)]
+    assert not list(tmp_path.glob("*.ts"))  # le morceau coupé est supprimé après traitement
