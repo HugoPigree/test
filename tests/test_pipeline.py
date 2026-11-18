@@ -105,11 +105,13 @@ def test_probe_duration_of_fmp4_twitch_recording(tmp_path):
     # (horodatages qui ne commencent pas à 0). 3 segments de 2 s => 6 s de vidéo.
     hls = tmp_path / "hls"
     hls.mkdir()
+    # Lancé depuis le dossier hls : sous Windows, ffmpeg n'écrit pas init.mp4 à côté de la
+    # playlist quand on lui donne un chemin avec des « \ ».
     subprocess.run([
         "ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=320x180:rate=30",
         "-f", "lavfi", "-i", "sine", "-t", "20", "-c:v", "libx264", "-preset", "ultrafast",
         "-g", "60", "-c:a", "aac", "-f", "hls", "-hls_segment_type", "fmp4", "-hls_time", "2",
-        "-hls_list_size", "0", str(hls / "live.m3u8")], check=True)
+        "-hls_list_size", "0", "live.m3u8"], check=True, cwd=hls)
     rec = tmp_path / "stream.ts"
     rec.write_bytes(b"".join((hls / name).read_bytes()
                              for name in ["init.mp4", "live5.m4s", "live6.m4s", "live7.m4s"]))
