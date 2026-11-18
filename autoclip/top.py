@@ -132,7 +132,9 @@ def top_caption(clip: dict, text: str, hashtags: list[str]) -> str:
     return " ".join(f"{text} {credit} {tags}".split())
 
 
-def make_top_clip(cfg: Config, clip: dict, rank: int, day: str, work: Path) -> Path | None:
+def make_top_clip(cfg: Config, clip: dict, rank: int, day: str, work: Path,
+                  game: str = "") -> Path | None:
+    """`game` : catégorie Twitch du clip (« Grand Theft Auto VI »), donnée à Claude et à Whisper."""
     name = f"top_{day}_{rank:02d}"
     out_dir = Path(cfg.paths.export) / name
     meta_path = out_dir / "meta.json"
@@ -148,8 +150,13 @@ def make_top_clip(cfg: Config, clip: dict, rank: int, day: str, work: Path) -> P
     meta = video.probe(src)
     dur = min(meta["duration"], MAX_DURATION)
     created = datetime.fromisoformat(clip["created_at"].replace("Z", "+00:00")).timestamp()
+    # Le « titre du live » vu par Claude (et par Whisper) : titre du clip + jeu, sinon Claude
+    # devine le contexte des clips de jeu à partir des seules paroles.
+    title = clip.get("title", "")
+    if game:
+        title = f"{title} (catégorie Twitch : {game})".strip()
     session = {"video_path": src, "start_ts": created, "channel": clip["broadcaster_name"].lower(),
-               "metadata": {"title": clip.get("title", ""), "author": clip["broadcaster_name"]}}
+               "metadata": {"title": title, "author": clip["broadcaster_name"]}}
     # Le clip entier, sans le recouper ; pas de pic de chat ici (pas de zoom ni de chat incrusté).
     peak = Peak(t_peak=0.0, start=0.0, end=round(dur, 2), score=0.0, activity=0.0, baseline=0.0,
                 n_messages=0, sample=[clip.get("title", "")])
@@ -166,7 +173,7 @@ def make_top_clip(cfg: Config, clip: dict, rank: int, day: str, work: Path) -> P
                           + pipeline.fixed_hashtags(ccfg))
     (out_dir / "caption.txt").write_text(caption + "\n", encoding="utf-8")
     m.update({"caption": caption, "channel": clip["broadcaster_name"], "source_url": clip["url"],
-              "views": clip.get("view_count", 0), "twitch_clip": clip})
+              "views": clip.get("view_count", 0), "game": game, "twitch_clip": clip})
     meta_path.write_text(json.dumps(m, indent=2, ensure_ascii=False), encoding="utf-8")
     src.unlink(missing_ok=True)
     return out_dir
@@ -200,10 +207,11 @@ def run_top(cfg: Config, lang: str, count: int) -> list[Path]:
     work = Path(cfg.paths.recordings) / "top_downloads"
     out = []
     for rank, clip in enumerate(top, 1):
-        log.info("#%d %s (%s vues) : %s", rank, clip["broadcaster_name"], clip.get("view_count"),
-                 clip.get("title", ""))
+        game = games.get(clip.get("game_id", ""), ("", 0))[0]
+        log.info("#%d %s (%s vues, %s) : %s", rank, clip["broadcaster_name"], clip.get("view_count"),
+                 game or "catégorie inconnue", clip.get("title", ""))
         try:
-            d = make_top_clip(cfg, clip, rank, day, work)
+            d = make_top_clip(cfg, clip, rank, day, work, game=game)
             if d:
                 out.append(d)
         except Exception:  # noqa: BLE001 - un clip raté ne doit pas bloquer les autres

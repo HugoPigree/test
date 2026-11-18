@@ -99,16 +99,18 @@ def test_run_top_searches_top_games_plus_config_categories(monkeypatch, tmp_path
 
         def clips(self, gid, since, until, pages):
             asked[gid] = pages
-            return {"gta6": [clip("big", 6398)], "509658": [clip("jc", 300)],
-                    "516575": [clip("valo", 1431), clip("en", 9000, lang="en")]}[gid]
+            found = {"gta6": [clip("big", 6398)], "509658": [clip("jc", 300)],
+                     "516575": [clip("valo", 1431), clip("en", 9000, lang="en")]}[gid]
+            return [dict(c, game_id=gid) for c in found]
 
-    made = []
+    made, games = [], []
     monkeypatch.setattr(top, "TwitchAPI", FakeAPI)
-    monkeypatch.setattr(top, "make_top_clip",
-                        lambda cfg, c, rank, day, work: made.append((rank, c["id"])) or tmp_path / c["id"])
+    monkeypatch.setattr(top, "make_top_clip", lambda cfg, c, rank, day, work, game="": (
+        made.append((rank, c["id"])), games.append(game), tmp_path / c["id"])[-1])
     cfg = Config()
     out = top.run_top(cfg, "fr", 2)
     assert made == [(1, "big"), (2, "valo")]  # GTA VI n'est pas dans la liste : trouvé via le top
+    assert games == ["Grand Theft Auto VI", "VALORANT"]  # le jeu suit chaque clip
     assert len(out) == 2 and asked["top_n"] == 100
     # Top : 1 page ; liste de la config : 5 pages (y compris Just Chatting, présent dans les deux).
     assert (asked["gta6"], asked["509658"], asked["516575"]) == (1, 5, 5)
@@ -139,13 +141,19 @@ def test_top_clip_end_to_end(tmp_path, monkeypatch):
     cfg.paths.recordings = str(tmp_path / "rec")
     cfg.vertical.preset = "ultrafast"
     c = clip("Abc", 4321)
-    out = top.make_top_clip(cfg, c, 1, "2026-11-18", tmp_path / "work")
+    seen = {}
+    monkeypatch.setattr(pipeline.context, "describe",
+                        lambda cfg, streamer, title, transcript, chat, tags: seen.update(title=title))
+    out = top.make_top_clip(cfg, c, 1, "2026-11-18", tmp_path / "work", game="ROB RUN")
     assert out.name == "top_2026-11-18_01"
+    # Claude reçoit le titre du clip ET le jeu.
+    assert seen["title"] == "il a pas fait ça (catégorie Twitch : ROB RUN)"
     info = video.probe(out / "video.mp4")
     assert (info["width"], info["height"]) == (1080, 1920)
     assert abs(info["duration"] - 60.0) < 0.5  # clip entier, plafonné à 60 s, pas recoupé
     meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
     assert meta["views"] == 4321 and meta["source_url"] == c["url"] and meta["channel"] == "Etostark__"
+    assert meta["game"] == "ROB RUN"
     assert meta["tiktok"] is None and meta["clip_start"] == 0.0
     caption = (out / "caption.txt").read_text(encoding="utf-8")
     assert "Clip de Etostark__, créé par clippeur42" in caption and c["url"] in caption

@@ -170,9 +170,15 @@ faster-whisper 1.2.1), **18/11/2026** :
   sur ROB RUN). Aussi : l'API ne renvoie pas les clips strictement triés par vues, et les vues
   bougent dans la journée. D'où `top_games = 100` (demandé par l'utilisateur). Relancé : top 3 =
   chowh1 6578, WankilStudio 1995, Kamet0 1853 ; recherche ~70 s, 6 min en tout. Les 3 anciens
-  dossiers sont dans `ready_to_post/_test_top/ancien_top_*`. Limite : Claude ne voit pas l'image
-  et ne reçoit pas le nom du jeu, donc les accroches de clips de jeu sont devinées (« Kamet0
-  panique face à une petite plante », #mario sur ROB RUN). Constat : si le clip a déjà des sous-titres incrustés par le streamer, ils
+  dossiers sont dans `ready_to_post/_test_top/ancien_top_*`. Limite : Claude ne voit pas l'image,
+  donc les accroches de clips de jeu étaient devinées (« Kamet0 panique face à une petite plante »,
+  #mario sur ROB RUN).
+- Depuis, `make_top_clip(game=…)` : la catégorie Twitch est ajoutée au titre donné à Claude et à
+  Whisper (« <titre du clip> (catégorie Twitch : <jeu>) ») et rangée dans `meta.json` (`game`).
+  Refait sur le vrai Twitch : « chowh1 trouve une danse bizarre dans GTA VI », « WankilStudio
+  réagit à un chien mutant sur GTA VI », hashtags #gta6 / #robrun au lieu de #mario. Toujours sans
+  image : certains détails restent des suppositions (le « chien mutant » n'est pas vérifié).
+  Versions sans le jeu : `ready_to_post/_test_top/sans_jeu_top_*`. Constat : si le clip a déjà des sous-titres incrustés par le streamer, ils
   apparaissent en double ; la musique de fond s'ajoute aussi (réglage `[music]` commun).
 
 Méthodes de vérification utilisées (à refaire de la même façon) :
