@@ -161,6 +161,12 @@ def ready_peaks(cfg: Config, messages: list[dict], now: float, last_clip: float)
     return out
 
 
+def chat_history_seconds(cfg: Config) -> float:
+    """Durée de chat gardée en mémoire : au moins ce que regarde `ready_peaks` (sinon, avec un petit
+    buffer vidéo, le 1er message a toujours moins de `baseline_window` et rien n'est jamais détecté)."""
+    return max(cfg.live.buffer_minutes * 60, 900.0, 3 * cfg.detection.baseline_window) + 60
+
+
 def _lower_priority() -> None:
     """Priorité basse pour le traitement des clips : Whisper et les ffmpeg lancés d'ici en héritent.
 
@@ -281,7 +287,7 @@ def _watch(cfg: Config, jobs: queue.Queue, stop: threading.Event) -> None:
             if now >= next_detect:
                 next_detect = now + DETECT_EVERY
                 with lock:
-                    messages[:] = [m for m in messages if m["ts"] > now - keep]
+                    messages[:] = [m for m in messages if m["ts"] > now - chat_history_seconds(cfg)]
                     recent = list(messages)
                 for peak in ready_peaks(cfg, recent, now, last_clip):
                     last_clip = peak.t_peak

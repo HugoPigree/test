@@ -97,6 +97,21 @@ def test_cooldown_blocks_a_second_clip_of_the_same_moment():
     assert len(ready_peaks(cfg, msgs, now, last_clip)) == 2
 
 
+def test_small_video_buffer_still_detects_peaks():
+    # Bug réel : avec buffer_minutes = 5 (config de test), le chat n'était gardé que 5 min et
+    # ready_peaks attend 5 min d'historique : aucun pic n'était jamais détecté.
+    cfg = Config()
+    cfg.live.buffer_minutes = 5
+    keep = live.chat_history_seconds(cfg)
+    assert keep > cfg.detection.baseline_window
+    msgs = synthetic_chat(duration=420, bursts=[330])
+    now = START_TS + 420
+    old = [m for m in msgs if m["ts"] > now - cfg.live.buffer_minutes * 60]  # ancien comportement
+    assert ready_peaks(cfg, old, now, 0.0) == []
+    kept = [m for m in msgs if m["ts"] > now - keep]
+    assert any(p.start <= START_TS + 330 <= p.t_peak for p in ready_peaks(cfg, kept, now, 0.0))
+
+
 def test_channels_from_config(tmp_path):
     path = tmp_path / "c.toml"
     path.write_text('[twitch]\nchannels = ["JLTomy", "#Etostark__"]\n', encoding="utf-8")
