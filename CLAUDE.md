@@ -85,7 +85,7 @@ brouillons depuis son téléphone.
 | `autoclip/subtitles.py` | faster-whisper (`hotwords` = vocabulaire + titre du live, puis `fixes`), recollage des élisions, ASS : mot qui « saute », titre qui rebondit, chat qui défile en bas à gauche (`pick_chat`). |
 | `autoclip/context.py` | Titre, légende, hashtags et corrections de mots écrits par Claude via `claude -p --model haiku --tools "" --json-schema …` (abonnement Claude de l'utilisateur, pas de clé API), lancé dans un dossier vide. Si Claude manque ou échoue : `None`, et le pipeline reprend l'ancienne accroche. |
 | `autoclip/live.py` | Mode continu : un thread `_watch` par chaîne (`streamlink --stdout` → `ffmpeg -f segment` en MPEG-TS, purge du buffer, détection toutes les 5 s, découpe depuis les segments) et un seul `_worker` pour toutes les chaînes, en priorité basse. Chaque tâche de la file emporte la config de sa chaîne (`channel_config`). |
-| `autoclip/top.py` | `autoclip top --lang fr --count 3` (demandé le 18/11/2026) : API Helix (jeton d'appli, Get Games puis Get Clips 24 h par catégorie de `[top] categories`), filtre langue, doublons (id, ou même VOD à < 60 s), tri par vues ; yt-dlp ; `process_peak` sur le clip entier (60 s max, accroche 3 s, pas de zoom ni de chat) ; `ready_to_post/top_AAAA-MM-JJ_NN/` avec crédit streamer + clippeur + lien dans `caption.txt`, vues / lien / chaîne dans `meta.json`. Jamais d'upload TikTok. Identifiants : `[top] client_id / client_secret` ou `TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET`. |
+| `autoclip/top.py` | `autoclip top --lang fr --count 3` (demandé le 18/11/2026) : API Helix (jeton d'appli, Get Top Games pour les `top_games` = 100 catégories les plus regardées du moment, 1 page chacune, + Get Games pour `[top] categories`, 5 pages chacune ; puis Get Clips 24 h par catégorie), filtre langue, doublons (id, ou même VOD à < 60 s), tri par vues ; yt-dlp ; `process_peak` sur le clip entier (60 s max, accroche 3 s, pas de zoom ni de chat) ; `ready_to_post/top_AAAA-MM-JJ_NN/` avec crédit streamer + clippeur + lien dans `caption.txt`, vues / lien / chaîne dans `meta.json`. Jamais d'upload TikTok. Identifiants : `[top] client_id / client_secret` ou `TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET`. |
 | `autoclip/tiktok.py` | OAuth + Content Posting API (`inbox` / `direct`). **Jamais testé en vrai.** |
 | `scripts/setup_server.sh` | Installation idempotente, sans sudo (venv, dépendances, modèle Whisper, config, check). |
 | `scripts/run_tmux.sh` | Lance `autoclip live` (par défaut) dans la session tmux `autoclip`. |
@@ -164,7 +164,15 @@ faster-whisper 1.2.1), **18/11/2026** :
   compris, puis 64-69 s). L'API renvoie des URL `www.twitch.tv/<chaîne>/clip/<slug>` : yt-dlp OK.
   Limites vues : sur un clip de jeu presque sans paroles (Gotaga, titre Twitch « x »), Claude n'a
   que la transcription (« c'est un écouté thank you ») et l'accroche n'a pas de sens ; le 3e est
-  un clip auto d'un bot (« WzBot AutoCLIP », 60 s) créé depuis le compte du streameur. Constat : si le clip a déjà des sous-titres incrustés par le streamer, ils
+  un clip auto d'un bot (« WzBot AutoCLIP », 60 s) créé depuis le compte du streameur.
+- **Ce n'était pas le vrai top 3** : en fouillant les 100 catégories les plus regardées, 3 clips FR
+  étaient plus vus (chowh1 6398 et WankilStudio 1995 sur GTA VI, sorti ce jour-là ; Kamet0 1846
+  sur ROB RUN). Aussi : l'API ne renvoie pas les clips strictement triés par vues, et les vues
+  bougent dans la journée. D'où `top_games = 100` (demandé par l'utilisateur). Relancé : top 3 =
+  chowh1 6578, WankilStudio 1995, Kamet0 1853 ; recherche ~70 s, 6 min en tout. Les 3 anciens
+  dossiers sont dans `ready_to_post/_test_top/ancien_top_*`. Limite : Claude ne voit pas l'image
+  et ne reçoit pas le nom du jeu, donc les accroches de clips de jeu sont devinées (« Kamet0
+  panique face à une petite plante », #mario sur ROB RUN). Constat : si le clip a déjà des sous-titres incrustés par le streamer, ils
   apparaissent en double ; la musique de fond s'ajoute aussi (réglage `[music]` commun).
 
 Méthodes de vérification utilisées (à refaire de la même façon) :

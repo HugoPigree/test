@@ -112,10 +112,12 @@ cooldown = 90           # secondes minimum entre les pics de deux clips (anti-do
 
 [top]
 # `autoclip top --lang fr --count 3` : top des clips Twitch des dernières 24 h (API Twitch).
-categories = ["Just Chatting", "Grand Theft Auto V", "League of Legends", "VALORANT"]  # noms exacts Twitch
+top_games = 100         # cherche aussi dans les 100 catégories les plus regardées du moment (0 = non)
+top_games_pages = 1     # pages de 100 clips pour chacune d'elles
+categories = ["Just Chatting", "Grand Theft Auto V", "League of Legends", "VALORANT"]  # toujours fouillées, noms exacts Twitch
 lang = "fr"
 count = 3
-pages = 5               # pages de 100 clips par catégorie (les plus vus d'abord)
+pages = 5               # pages de 100 clips pour chaque catégorie de `categories`
 # Appli Twitch (https://dev.twitch.tv/console). Secrets : dans config.toml ou dans les variables
 # TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET, jamais dans ce fichier.
 client_id = ""

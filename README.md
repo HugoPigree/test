@@ -72,7 +72,7 @@ chat IRC   ──► recordings/<session>/chat.jsonl ┴─► pics de chat ─�
 
 `autoclip top --lang fr --count 3` prépare le top 3 des clips Twitch français des dernières 24 h :
 
-1. API Twitch officielle (Get Clips) sur les catégories de `[top] categories` (noms exacts Twitch, ex. `Just Chatting`, `Grand Theft Auto V`, `League of Legends`, `VALORANT`) ; on garde la langue demandée, on enlève les doublons (même clip, ou même moment du même live clippé par plusieurs viewers), on trie par vues.
+1. API Twitch officielle (Get Clips) sur les 100 catégories les plus regardées du moment (`[top] top_games`, 1 page de 100 clips chacune) **et** sur celles de `[top] categories` (noms exacts Twitch, 5 pages chacune, ex. `Just Chatting`, `Grand Theft Auto V`) ; ça prend ~1 min ; on garde la langue demandée, on enlève les doublons (même clip, ou même moment du même live clippé par plusieurs viewers), on trie par vues.
 2. Téléchargement avec yt-dlp.
 3. Pipeline habituel sur le clip **entier** (60 s max, pas recoupé) : 9:16, sous-titres Whisper, titre d'accroche les 3 premières secondes (écrit par Claude s'il est connecté).
 4. `ready_to_post/top_AAAA-MM-JJ_01` à `03` : `video.mp4`, `caption.txt` (« Clip de <chaîne>, créé par <clippeur>. Source : Twitch <lien> »), `meta.json` (vues, lien d'origine, chaîne, réponse complète de l'API dans `twitch_clip`). Relancer le même jour ne refait pas un clip déjà prêt et n'écrase pas un dossier existant.

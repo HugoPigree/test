@@ -182,12 +182,15 @@ class TikTokConfig:
 
 @dataclass
 class TopConfig:
-    # `autoclip top` : catégories où chercher les clips des dernières 24 h (noms exacts Twitch).
+    # `autoclip top` : on cherche dans les `top_games` catégories les plus regardées du moment
+    # (0 = aucune) et, en plus, dans `categories` (noms exacts Twitch).
+    top_games: int = 100
+    top_games_pages: int = 1  # pages de 100 clips pour chaque catégorie du top
     categories: list[str] = field(default_factory=lambda: [
         "Just Chatting", "Grand Theft Auto V", "League of Legends", "VALORANT"])
     lang: str = "fr"
     count: int = 3
-    pages: int = 5          # pages de 100 clips par catégorie (les plus vus d'abord)
+    pages: int = 5          # pages de 100 clips pour chaque catégorie de `categories`
     # Appli Twitch (dev.twitch.tv/console). Secrets : config.toml ou TWITCH_CLIENT_ID /
     # TWITCH_CLIENT_SECRET, jamais dans le dépôt.
     client_id: str = ""

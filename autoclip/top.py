@@ -1,7 +1,8 @@
 """`autoclip top` : le top des clips Twitch d'une langue sur les dernières 24 h, prêts à poster.
 
-1. API Twitch officielle (Helix, jeton d'application) : Get Games pour les catégories de
-   `[top] categories`, puis Get Clips des dernières 24 h par catégorie ;
+1. API Twitch officielle (Helix, jeton d'application) : les `[top] top_games` catégories les plus
+   regardées du moment (Get Top Games) + celles de `[top] categories` (Get Games), puis Get Clips
+   des dernières 24 h par catégorie ;
 2. on garde la langue demandée, on déduplique, on trie par vues, on prend les N premiers ;
 3. téléchargement avec yt-dlp, puis le pipeline habituel sur le clip entier (60 s max, pas
    recoupé) : 9:16, sous-titres Whisper, titre d'accroche les 3 premières secondes ;
@@ -62,6 +63,20 @@ class TwitchAPI:
             else:
                 log.warning("Catégorie Twitch introuvable : %r (nom exact attendu)", n)
         return out
+
+    def top_games(self, count: int) -> list[dict]:
+        """Les `count` catégories les plus regardées en ce moment ([{"id", "name"}, …])."""
+        out, cursor = [], None
+        while len(out) < count:
+            params = {"first": min(100, count - len(out))}
+            if cursor:
+                params["after"] = cursor
+            page = self.get("games/top", params)
+            out += page.get("data", [])
+            cursor = (page.get("pagination") or {}).get("cursor")
+            if not cursor or not page.get("data"):
+                break
+        return out[:count]
 
     def clips(self, game_id: str, since: datetime, until: datetime, pages: int) -> list[dict]:
         out, cursor = [], None
@@ -161,12 +176,21 @@ def run_top(cfg: Config, lang: str, count: int) -> list[Path]:
     api = TwitchAPI(cfg.top.client_id, cfg.top.client_secret)
     until = datetime.now(timezone.utc)
     since = until - timedelta(hours=24)
-    games = api.game_ids(cfg.top.categories)
+    # Catégories : les plus regardées du moment (`top_games`, 1 page chacune par défaut) + la liste
+    # de la config (`pages` chacune). Une catégorie présente deux fois garde le plus de pages.
+    games: dict[str, tuple[str, int]] = {}
+    if cfg.top.top_games > 0:
+        for g in api.top_games(cfg.top.top_games):
+            games[g["id"]] = (g["name"], cfg.top.top_games_pages)
+    for name, gid in api.game_ids(cfg.top.categories).items():
+        games[gid] = (name, max(cfg.top.pages, games.get(gid, ("", 0))[1]))
+    log.info("Recherche des clips des dernières 24 h dans %d catégories…", len(games))
     clips = []
-    for name, gid in games.items():
-        found = api.clips(gid, since, until, cfg.top.pages)
+    for gid, (name, pages) in games.items():
+        found = api.clips(gid, since, until, pages)
         n_lang = sum((c.get("language") or "").lower() == lang.lower() for c in found)
-        log.info("%s : %d clips sur 24 h, dont %d en « %s »", name, len(found), n_lang, lang)
+        log.log(logging.INFO if n_lang else logging.DEBUG,
+                "%s : %d clips sur 24 h, dont %d en « %s »", name, len(found), n_lang, lang)
         clips += found
     top = pick_top(clips, lang, count)
     if not top:

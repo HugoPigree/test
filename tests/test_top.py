@@ -66,6 +66,58 @@ def test_twitch_api_token_games_and_paginated_clips(monkeypatch):
     assert first["first"] == 100 and first["started_at"] == "2026-11-18T00:00:00Z"
 
 
+def test_top_games_paginates_up_to_count(monkeypatch):
+    pages = {None: ([{"id": str(i), "name": f"jeu{i}"} for i in range(100)], "p2"),
+             "p2": ([{"id": str(i), "name": f"jeu{i}"} for i in range(100, 200)], "p3")}
+    seen = []
+
+    def get(url, headers, params, timeout):
+        seen.append(params)
+        data, cursor = pages[params.get("after")]
+        return FakeResp({"data": data[:params["first"]], "pagination": {"cursor": cursor}})
+
+    monkeypatch.setattr(top.requests, "post", lambda url, data, timeout: FakeResp({"access_token": "t"}))
+    monkeypatch.setattr(top.requests, "get", get)
+    games = top.TwitchAPI("id", "s").top_games(150)
+    assert len(games) == 150 and games[-1]["id"] == "149"
+    assert [p["first"] for p in seen] == [100, 50]
+
+
+def test_run_top_searches_top_games_plus_config_categories(monkeypatch, tmp_path):
+    asked = {}
+
+    class FakeAPI:
+        def __init__(self, cid, secret):
+            pass
+
+        def top_games(self, n):
+            asked["top_n"] = n
+            return [{"id": "gta6", "name": "Grand Theft Auto VI"}, {"id": "509658", "name": "Just Chatting"}]
+
+        def game_ids(self, names):
+            return {"Just Chatting": "509658", "VALORANT": "516575"}
+
+        def clips(self, gid, since, until, pages):
+            asked[gid] = pages
+            return {"gta6": [clip("big", 6398)], "509658": [clip("jc", 300)],
+                    "516575": [clip("valo", 1431), clip("en", 9000, lang="en")]}[gid]
+
+    made = []
+    monkeypatch.setattr(top, "TwitchAPI", FakeAPI)
+    monkeypatch.setattr(top, "make_top_clip",
+                        lambda cfg, c, rank, day, work: made.append((rank, c["id"])) or tmp_path / c["id"])
+    cfg = Config()
+    out = top.run_top(cfg, "fr", 2)
+    assert made == [(1, "big"), (2, "valo")]  # GTA VI n'est pas dans la liste : trouvé via le top
+    assert len(out) == 2 and asked["top_n"] == 100
+    # Top : 1 page ; liste de la config : 5 pages (y compris Just Chatting, présent dans les deux).
+    assert (asked["gta6"], asked["509658"], asked["516575"]) == (1, 5, 5)
+    cfg.top.top_games = 0
+    made.clear()
+    top.run_top(cfg, "fr", 2)
+    assert made == [(1, "valo"), (2, "jc")]  # sans le top : seulement la liste
+
+
 def test_missing_credentials_say_where_to_put_them():
     with pytest.raises(RuntimeError, match="client_id"):
         top.TwitchAPI("", "")
