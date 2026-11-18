@@ -38,7 +38,7 @@ def find_peaks(cfg: Config, session: dict) -> tuple[list[Peak], dict]:
 
 
 def _shorten(text: str, max_chars: int) -> str:
-    text = text.strip()
+    text = text.strip().lstrip("-–— ")  # Whisper met parfois un tiret de dialogue devant
     return text if len(text) <= max_chars else text[:max_chars].rsplit(" ", 1)[0] + "…"
 
 
