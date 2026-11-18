@@ -194,7 +194,8 @@ def _worker(cfg: Config, jobs: queue.Queue) -> None:
         try:
             session = {"video_path": job["raw"], "start_ts": job["start_ts"],
                        "channel": cfg.twitch.channel, "metadata": job["metadata"]}
-            out = process_peak(cfg, session, video.probe(job["raw"]), job["peak"], 0, name=job["name"])
+            out = process_peak(cfg, session, video.probe(job["raw"]), job["peak"], 0,
+                               name=job["name"], messages=job["chat"])
             if out and cfg.tiktok.auto_upload:
                 upload_clips(cfg, [out])
         except Exception:  # noqa: BLE001 - un clip raté ne doit pas arrêter le mode continu
@@ -203,7 +204,8 @@ def _worker(cfg: Config, jobs: queue.Queue) -> None:
             job["raw"].unlink(missing_ok=True)
 
 
-def _cut(cfg: Config, rec: Recording, peak: Peak, queue_dir: Path, metadata: dict) -> dict | None:
+def _cut(cfg: Config, rec: Recording, peak: Peak, queue_dir: Path, metadata: dict,
+         messages: list[dict]) -> dict | None:
     """Coupe le pic (heures absolues) depuis le buffer ; renvoie la tâche à mettre en file."""
     name = f"{datetime.fromtimestamp(peak.t_peak):%Y-%m-%d_%Hh%Mm%Ss}_{cfg.twitch.channel}"
     r0, r1 = peak.start - rec.start_ts, peak.end - rec.start_ts  # secondes dans la connexion
@@ -219,8 +221,9 @@ def _cut(cfg: Config, rec: Recording, peak: Peak, queue_dir: Path, metadata: dic
         log.warning("Pic %s : trop peu de vidéo dans le buffer (reconnexion ?), ignoré.", name)
         raw.unlink(missing_ok=True)
         return None
+    chat = [m for m in messages if peak.start - 5 <= m["ts"] <= peak.end + 5]
     return {"name": name, "raw": raw, "peak": clip, "start_ts": rec.start_ts + offset,
-            "metadata": metadata}
+            "metadata": metadata, "chat": chat}
 
 
 def run_live(cfg: Config) -> None:
@@ -280,7 +283,7 @@ def run_live(cfg: Config) -> None:
                     if rec is None or rec.start_ts is None:
                         log.warning("Pas d'enregistrement en cours : pic ignoré.")
                         continue
-                    job = _cut(cfg, rec, peak, queue_dir, metadata)
+                    job = _cut(cfg, rec, peak, queue_dir, metadata, recent)
                     if job:
                         jobs.put(job)
 

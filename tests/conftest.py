@@ -29,6 +29,13 @@ def synthetic_chat(duration=240, seed=1, bursts=BURSTS):
     return msgs
 
 
+@pytest.fixture(autouse=True)
+def no_claude(monkeypatch):
+    """Les tests n'appellent jamais le vrai Claude Code (lent, et demande un compte)."""
+    from autoclip import context
+    monkeypatch.setattr(context, "describe", lambda *a, **k: None)
+
+
 @pytest.fixture
 def session_dir(tmp_path: Path) -> Path:
     if not shutil.which("ffmpeg"):

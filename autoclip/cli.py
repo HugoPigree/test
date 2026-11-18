@@ -101,7 +101,7 @@ def cmd_detect(cfg: Config, args) -> int:
     from autoclip.pipeline import find_peaks, load_session
 
     session = load_session(Path(args.session))
-    peaks, meta = find_peaks(cfg, session)
+    peaks, meta, _messages = find_peaks(cfg, session)
     _, _, act = activity_series(load_chat(session["chat_path"]), session["start_ts"],
                                 meta["duration"], cfg.detection)
     print(ascii_timeline(act, peaks))

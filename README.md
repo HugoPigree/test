@@ -52,9 +52,11 @@ chat IRC   ──► recordings/<session>/chat.jsonl ┴─► pics de chat ─�
 
 - **Trop ou pas assez de clips** : `detection.threshold` (3.5 par défaut, baisser à 2.5 donne plus de clips) et `detection.max_clips`.
 - **Clip qui commence trop tard ou trop tôt** : `detection.pre_roll` (30 s avant la réaction du chat) et `detection.chat_offset`.
-- **Accroche** : la phrase dite au moment du pic (sinon le message du chat le plus répété, sinon le titre du live) est incrustée en haut pendant `export.hook_duration` secondes (3 par défaut, 0 = aucune) et reprise dans `caption.txt`.
-- **Musique de fond** (désactivée) : `[music] enabled = true`, puis mets des morceaux libres de droits dans `music/`. Volume ~10 %, baissé automatiquement quand le son du live est fort dans la bande de la voix.
-- **Zoom au pic** (désactivé) : `vertical.peak_zoom = true` (zoom de 8 % pendant ~2 s).
+- **Contexte (Claude)** : pour chaque clip, Claude lit la transcription, le chat au moment du pic et le titre du live, puis écrit un **titre qui explique ce qui se passe** (incrusté en haut pendant tout le clip, `export.hook_duration`), la **légende** de `caption.txt` avec des hashtags liés au contenu, et corrige les mots mal compris par Whisper. Ça passe par Claude Code (`claude -p`, modèle `haiku`) avec ton abonnement Claude, sans clé API : installe Claude Code, lance `claude` une fois et fais `/login`. Sans Claude, l'accroche reste la phrase dite au moment du pic. Réglages : `[context]`.
+- **Sous-titres argot / mots arabes / anglais** : `subtitles.vocabulary` (mots que Whisper doit savoir écrire, le titre du live est ajouté tout seul) et `[subtitles.fixes]` (corrections forcées, ex. `walla = "wallah"`).
+- **Animations** : le mot prononcé « saute » (85 → 120 → 108 %), le titre arrive en rebondissant, et le chat défile en bas à gauche à partir du pic (`export.chat_overlay`, 4 messages, 0 = aucun ; pseudos colorés comme sur Twitch, sans bots ni commandes).
+- **Musique de fond** (activée) : mets des morceaux libres de droits dans `music/` (sinon pas de musique, juste un avertissement dans le journal). Volume ~10 %, baissé automatiquement quand le son du live est fort dans la bande de la voix.
+- **Zoom au pic** (activé) : `vertical.peak_zoom` (zoom de 8 % pendant ~2 s).
 - **Cadrage** : `vertical.layout`
   - `blur` (par défaut) : image entière sur fond flouté. Marche avec tout, rien n'est coupé.
   - `crop` : recadrage plein écran, centré par défaut (`crop_x` pour décaler).

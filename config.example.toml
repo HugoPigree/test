@@ -42,7 +42,7 @@ crop_x = 0.5            # crop : position horizontale (0 = gauche, 0.5 = centre,
 facecam = [0.0, 0.0, 0.25, 0.30]  # split : x, y, largeur, hauteur de la facecam (fractions de l'image)
 facecam_ratio = 0.40    # split : part de la hauteur occupée par la facecam
 game_x = 0.5            # split : position horizontale du recadrage du jeu
-peak_zoom = false       # true => léger zoom (8 %) pendant ~2 s au moment du pic de chat
+peak_zoom = true        # léger zoom (8 %) pendant ~2 s au moment du pic de chat
 crf = 20                # qualité x264 (plus bas = meilleure qualité, fichier plus gros)
 preset = "veryfast"     # vitesse d'encodage x264 ("ultrafast" sur une machine lente)
 fps = 30
@@ -63,16 +63,41 @@ highlight_color = "&H0000E5FF"  # mot en cours (jaune)
 outline_color = "&H00000000"    # contour (noir)
 outline = 6             # épaisseur du contour
 margin_v = 560          # distance des sous-titres depuis le bas (pixels sur 1920)
+# Mots que Whisper doit savoir écrire (argot, mots arabes, anglicismes, noms). Le titre du live
+# est ajouté tout seul. Trop de mots peut faire « entendre » ces mots là où ils ne sont pas.
+vocabulary = "JLTomy wesh wallah starfoullah hamdoulah inchallah mashallah wallahi frérot le sang zehef tiep bsahtek miskine hagra chouf sah wsh gros frr bro chill flex clutch rage stream subathon donation sub follow GTA Miami IRL"
+
+[subtitles.fixes]       # corrections forcées après Whisper (mot entier, majuscules ignorées)
+walla = "wallah"
+wala = "wallah"
+starfoulah = "starfoullah"
+astaghfirullah = "starfoullah"
+hamdoulilah = "hamdoulah"
+inshallah = "inchallah"
+frero = "frérot"
+jltommy = "JLTomy"
+gilectomie = "JLTomy"
+
+[context]
+# Titre, légende et corrections écrits par Claude (`claude -p`, avec ton abonnement Claude, sans
+# clé API). Il faut Claude Code installé et connecté (`claude`, puis /login). Sinon : accroche simple.
+enabled = true
+model = "haiku"
+claude_path = ""        # vide = cherché dans le PATH puis dans ~/.local/bin
+timeout = 120.0
+title_max_chars = 50
 
 [export]
-caption_template = "{hook} #jltomy #twitchfr #twitch #clip #fyp #pourtoi"  # texte de caption.txt
+# {caption} et {hashtags} viennent de Claude (sans Claude : {caption} = l'accroche, {hashtags} vide).
+caption_template = "{caption} {hashtags} #jltomy #twitchfr #fyp #pourtoi"
 hook_max_chars = 60     # longueur max de l'accroche
-hook_duration = 3.0     # accroche incrustée en haut pendant les 3 premières secondes (0 = aucune)
+hook_duration = 60.0    # titre incrusté en haut pendant N s (0 = aucun, 60 = tout le clip)
+chat_overlay = 4        # messages du chat incrustés en bas à partir du pic (0 = aucun)
 keep_horizontal = false # true => garde aussi une version 16:9 du clip
 delete_raw = false      # true => supprime l'enregistrement brut après `process`
 
 [music]
-enabled = false         # true => musique de fond prise au hasard dans `dir` (mp3, m4a, wav…)
+enabled = true          # musique de fond prise au hasard dans `dir` (mp3, m4a, wav…), si le dossier en a
 dir = "music"           # musiques libres de droits uniquement
 volume = 0.10           # ~10 %, baissée automatiquement quand quelqu'un parle
 

@@ -8,7 +8,7 @@ from autoclip.config import Config
 from autoclip.peaks import Peak
 
 
-def fake_transcribe(wav, cfg):
+def fake_transcribe(wav, cfg, title=""):
     assert wav.exists() and wav.stat().st_size > 0
     return [subtitles.Word(0.5, 0.9, "Non"), subtitles.Word(0.9, 1.4, "mais"),
             subtitles.Word(1.4, 2.0, "c'est"), subtitles.Word(2.0, 2.6, "énorme !"),
@@ -44,7 +44,7 @@ def test_end_to_end(session_dir, tmp_path, monkeypatch, layout):
 
 
 def test_subtitle_failure_does_not_block_export(session_dir, tmp_path, monkeypatch):
-    def boom(wav, cfg):
+    def boom(wav, cfg, title=""):
         raise RuntimeError("pas de réseau pour télécharger le modèle")
 
     monkeypatch.setattr(subtitles, "transcribe", boom)
@@ -98,6 +98,34 @@ def test_music_and_peak_zoom(session_dir, tmp_path, monkeypatch):
     assert abs(info["duration"] - (meta["clip_end"] - meta["clip_start"])) < 0.5
     assert info["has_audio"] and (info["width"], info["height"]) == (1080, 1920)
     assert meta["music"] == "boucle.mp3"
+
+
+def test_claude_context_gives_title_caption_and_fixes(session_dir, tmp_path, monkeypatch):
+    monkeypatch.setattr(subtitles, "transcribe", fake_transcribe)
+    seen = {}
+
+    def fake_describe(cfg, channel, stream_title, transcript, chat, fixed_tags):
+        seen.update(transcript=transcript, chat=chat, tags=fixed_tags)
+        return {"title": "JLTomy perd son pari contre le chat", "caption": "Il y croyait trop 😭",
+                "hashtags": ["pari", "irl"], "fixes": {"énorme": "ÉNORME"}}
+
+    monkeypatch.setattr(pipeline.context, "describe", fake_describe)
+    cfg = Config()
+    cfg.paths.export = str(tmp_path / "out")
+    cfg.vertical.preset = "ultrafast"
+    cfg.detection.max_clips = 1
+    clip = pipeline.process_session(cfg, session_dir)[0]
+    assert seen["transcript"].startswith("Non mais c'est énorme")
+    assert seen["chat"] and all(0 <= t for t, _u, _m in seen["chat"])
+    assert "jltomy" in seen["tags"]
+    caption = (clip / "caption.txt").read_text(encoding="utf-8").strip()
+    assert caption == "Il y croyait trop 😭 #pari #irl #jltomy #twitchfr #fyp #pourtoi"
+    ass = (clip / "subtitles.ass").read_text(encoding="utf-8")
+    assert "JLTomy perd son pari contre le chat" in ass
+    assert "ÉNORME !" in ass  # correction de Claude, ponctuation gardée
+    assert ",Chat,," in ass  # messages du chat incrustés
+    meta = json.loads((clip / "meta.json").read_text(encoding="utf-8"))
+    assert meta["context"]["hashtags"] == ["pari", "irl"]
 
 
 def test_probe_duration_of_fmp4_twitch_recording(tmp_path):

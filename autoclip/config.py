@@ -76,7 +76,7 @@ class VerticalConfig:
     # split : position horizontale du recadrage du jeu.
     game_x: float = 0.5
     # Léger zoom (8 %) pendant ~2 s au moment du pic de chat.
-    peak_zoom: bool = False
+    peak_zoom: bool = True
     crf: int = 20
     preset: str = "veryfast"
     fps: int = 30
@@ -102,14 +102,41 @@ class SubtitlesConfig:
     outline: int = 6
     # Distance depuis le bas de l'image (pixels sur 1920).
     margin_v: int = 560
+    # Mots que Whisper doit savoir écrire (argot, mots arabes, anglicismes, noms) : passés en
+    # « hotwords » à chaque fenêtre de 30 s. Le titre du live est ajouté automatiquement.
+    vocabulary: str = ("JLTomy wesh wallah starfoullah hamdoulah inchallah mashallah wallahi "
+                       "frérot le sang zehef tiep bsahtek miskine hagra chouf sah wsh gros "
+                       "frr bro chill flex clutch rage stream subathon donation sub follow "
+                       "GTA Miami IRL")
+    # Corrections forcées après Whisper, mot entier, sans tenir compte des majuscules.
+    fixes: dict[str, str] = field(default_factory=lambda: {
+        "walla": "wallah", "wala": "wallah", "starfoulah": "starfoullah",
+        "astaghfirullah": "starfoullah", "hamdoulilah": "hamdoulah", "inshallah": "inchallah",
+        "frero": "frérot", "jltommy": "JLTomy", "gilectomie": "JLTomy",
+    })
+
+
+@dataclass
+class ContextConfig:
+    # Titre, légende et corrections de sous-titres écrits par Claude (`claude -p`, abonnement
+    # Claude, pas de clé API). Si Claude Code manque, retour à l'accroche simple.
+    enabled: bool = True
+    model: str = "haiku"
+    claude_path: str = ""   # vide = cherché dans le PATH puis dans ~/.local/bin
+    timeout: float = 120.0
+    title_max_chars: int = 50
 
 
 @dataclass
 class ExportConfig:
-    caption_template: str = "{hook} #jltomy #twitchfr #twitch #clip #fyp #pourtoi"
+    # {caption} et {hashtags} viennent de Claude ; sans Claude, {caption} = l'accroche et
+    # {hashtags} est vide. Aussi disponibles : {hook}, {channel}, {title} (titre du live).
+    caption_template: str = "{caption} {hashtags} #jltomy #twitchfr #fyp #pourtoi"
     hook_max_chars: int = 60
-    # Titre d'accroche incrusté en haut de la vidéo pendant les N premières secondes (0 = aucun).
-    hook_duration: float = 3.0
+    # Titre incrusté en haut pendant les N premières secondes (0 = aucun, 60 = tout le clip).
+    hook_duration: float = 60.0
+    # Messages du chat incrustés à partir du moment où il s'emballe (0 = aucun).
+    chat_overlay: int = 4
     keep_horizontal: bool = False
     # Supprimer l'enregistrement brut après traitement (gros fichiers !).
     delete_raw: bool = False
@@ -127,7 +154,7 @@ class LiveConfig:
 @dataclass
 class MusicConfig:
     # Musique de fond prise au hasard dans `dir`, baissée automatiquement quand quelqu'un parle.
-    enabled: bool = False
+    enabled: bool = True
     dir: str = "music"
     volume: float = 0.10
 
@@ -157,6 +184,7 @@ class Config:
     vertical: VerticalConfig = field(default_factory=VerticalConfig)
     subtitles: SubtitlesConfig = field(default_factory=SubtitlesConfig)
     export: ExportConfig = field(default_factory=ExportConfig)
+    context: ContextConfig = field(default_factory=ContextConfig)
     music: MusicConfig = field(default_factory=MusicConfig)
     live: LiveConfig = field(default_factory=LiveConfig)
     tiktok: TikTokConfig = field(default_factory=TikTokConfig)

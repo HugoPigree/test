@@ -1,5 +1,5 @@
 from autoclip.config import SubtitlesConfig
-from autoclip.subtitles import Word, build_ass, group_words, join_elisions
+from autoclip.subtitles import Word, apply_fixes, build_ass, group_words, join_elisions, pick_chat
 
 
 WORDS = [Word(0.0, 0.3, "Non"), Word(0.3, 0.6, "mais"), Word(0.6, 0.9, "attends"),
@@ -55,3 +55,30 @@ def test_hook_title_shown_at_the_top_for_the_first_seconds():
     assert "Il a (vraiment) fait ça" in hook[0]
     assert "Style: Hook," in ass
     assert ",Hook," not in build_ass(WORDS, SubtitlesConfig())  # pas d'accroche par défaut
+
+
+def test_fixes_replace_whole_words_and_keep_punctuation():
+    words = [Word(0, 1, "Walla,"), Word(1, 2, "wallaby"), Word(2, 3, "frero !")]
+    fixed = apply_fixes(words, {"walla": "wallah", "frero": "frérot"})
+    assert [w.text for w in fixed] == ["wallah,", "wallaby", "frérot !"]
+    assert SubtitlesConfig().fixes["starfoulah"] == "starfoullah"
+
+
+def test_chat_overlay_keeps_short_readable_messages():
+    chat = [(1.0, "a", "trop tôt"), (13.0, "Nightbot", "Abonne-toi"), (13.2, "b", "!subathon"),
+            (13.5, "c", "KEKW 😂"), (13.7, "d", "trop proche du précédent"),
+            (15.0, "e", "x" * 60), (16.0, "f", "il a pas fait ça")]
+    picked = pick_chat(chat, t_peak=20.0, n=4)
+    assert picked == [(13.5, "c", "KEKW"), (16.0, "f", "il a pas fait ça")]
+    assert pick_chat(chat, 20.0, n=0) == []
+
+
+def test_chat_overlay_scrolls_newest_at_the_bottom():
+    chat = [(10.0, "a", "un"), (11.0, "b", "deux"), (12.0, "c", "trois")]
+    ass = build_ass([], SubtitlesConfig(), chat=chat, chat_lines=2, chat_end=20.0)
+    events = [l for l in ass.splitlines() if l.startswith("Dialogue:") and ",Chat," in l]
+    # 1 ligne, puis 2, puis 2 (le plus vieux est sorti) : 5 événements.
+    assert len(events) == 5
+    last = [e for e in events if e.split(",")[1] == "0:00:12.00"]
+    assert len(last) == 2 and not any(": un" in e for e in last)
+    assert all(e.split(",")[2] == "0:00:20.00" for e in last)

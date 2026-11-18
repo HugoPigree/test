@@ -39,6 +39,17 @@ brouillons depuis son téléphone.
   l'accroche incrustée, le `pre_roll` à 30 s, la musique et le zoom (ces deux derniers en option).
 - Critères de classement demandés : force du pic de chat, transcription intéressante sans
   contexte, durée, début propre (voir `classement.md`).
+- **18/11/2026, après avoir vu les clips du PC de l'école** : « pas mal, mais on comprend pas ce
+  qui se passe », « les descriptions c'est des mots au hasard, ça se voit que c'est une IA »,
+  « pas de musique, on se fait vite chier », « clip brut, pas de valeur ajoutée », sous-titres bien
+  mais faux sur les anglicismes et les mots arabes. Demandé : contexte précis, petite animation,
+  musique de fond. D'où `context.py` (Claude), le vocabulaire Whisper, le chat incrusté, les
+  animations, et musique + zoom activés par défaut. L'utilisateur fournit lui-même les musiques
+  libres de droits (dossier `music/`).
+- Outils existants regardés (18/11/2026) : OpenShorts, AI-Youtube-Shorts-Generator et clones
+  choisissent les moments eux-mêmes avec une IA (on perdrait la détection par le chat) ; pycaps
+  (sous-titres animés) est en alpha et rend via Chromium, trop lourd ici ; Submagic / OpusClip
+  sont payants (15 à 69 $/mois). Décision : tout faire dans notre pipeline, en ASS (libass).
 
 ## Décisions prises
 
@@ -66,7 +77,8 @@ brouillons depuis son téléphone.
 | `autoclip/peaks.py` | Détection des pics : activité sur 10 s, médiane glissante 5 min + MAD, z-score, `pre_roll` / `post_roll`. |
 | `autoclip/pipeline.py` | Session → pics → `process_peak` (Whisper, accroche, ASS, rendu, `caption.txt`, `meta.json`) ; upload. |
 | `autoclip/video.py` | ffprobe / ffmpeg : 9:16 (`blur` / `crop` / `split`), zoom au pic, musique (sidechaincompress), miniature. |
-| `autoclip/subtitles.py` | faster-whisper, recollage des élisions, ASS (mot surligné + accroche en haut). |
+| `autoclip/subtitles.py` | faster-whisper (`hotwords` = vocabulaire + titre du live, puis `fixes`), recollage des élisions, ASS : mot qui « saute », titre qui rebondit, chat qui défile en bas à gauche (`pick_chat`). |
+| `autoclip/context.py` | Titre, légende, hashtags et corrections de mots écrits par Claude via `claude -p --model haiku --tools "" --json-schema …` (abonnement Claude de l'utilisateur, pas de clé API), lancé dans un dossier vide. Si Claude manque ou échoue : `None`, et le pipeline reprend l'ancienne accroche. |
 | `autoclip/live.py` | Mode continu : `streamlink --stdout` → `ffmpeg -f segment` (MPEG-TS), purge du buffer, détection toutes les 5 s, découpe depuis les segments, file + thread en nice 10. |
 | `autoclip/tiktok.py` | OAuth + Content Posting API (`inbox` / `direct`). **Jamais testé en vrai.** |
 | `scripts/setup_server.sh` | Installation idempotente, sans sudo (venv, dépendances, modèle Whisper, config, check). |
@@ -123,7 +135,14 @@ faster-whisper 1.2.1), **18/11/2026** :
 - `setup_windows.ps1` complet : runtime Visual C++ installé via winget (invite admin), modèle
   Whisper `small` téléchargé, `autoclip check --live` tout OK (JLTomy vu en live). Sans ce
   runtime, `ctranslate2.dll` ne se charge pas et Whisper plante.
-- Pas encore lancé : `install_task.ps1`, `autoclip live`, un vrai clip sous Windows.
+- `record --duration 600` sur JLTomy (IRL en voiture à Miami) : 10 min, 541 Mo, chat OK.
+  `detect` : 3 pics. `process` **sans Claude** (pas encore connecté) : 3 clips en 52 à 62 s chacun
+  (Whisper `small` ~30-40 s). Vérifié sur une planche d'images : titre en haut, mot qui saute,
+  zoom au pic, chat qui défile en bas à gauche. Constat : sans Claude, l'accroche n'a pas de sens
+  (« j'ai même pas dépassé l'induit économe… ») et Whisper se trompe sur l'audio de voiture
+  (« weepinnt », « l'induit »).
+- Pas encore lancé : `install_task.ps1`, `autoclip live`, **Claude réel** (`context.py` n'est testé
+  qu'avec un faux `claude`).
 
 Méthodes de vérification utilisées (à refaire de la même façon) :
 - Synchro chat/vidéo : transcrire avec Whisper une minute autour d'un pic (`video.extract_audio` +
@@ -177,6 +196,11 @@ Autres pièges connus :
 - Windows : le muxer HLS de ffmpeg n'écrit pas `init.mp4` à côté de la playlist quand on lui donne
   un chemin avec des `\` (il l'écrit dans le dossier courant). Le test fMP4 lance donc ffmpeg
   depuis le dossier `hls`.
+- **Python 3.12** : `ChatLogger._stop` masquait `Thread._stop()` et `join()` plantait à la fin de
+  `record` (pas vu sous 3.14). Renommé `_stop_event`.
+- Windows : sans `encoding="utf-8"`, le JSON de Streamlink est lu en cp1252 (titre « Ã  »).
+- Windows PowerShell 5.1 : `Get-Content` / `Set-Content` lisent et écrivent en ANSI par défaut et
+  abîment les accents des fichiers UTF-8. Éditer les fichiers avec Python ou l'outil Edit.
 - Windows : `os.setpriority` n'existe pas ; via ctypes, il faut déclarer les types du handle
   (sinon il est tronqué à 32 bits et `SetPriorityClass` échoue sans rien dire).
 
@@ -188,6 +212,9 @@ Mesuré sur le PC de l'école :
 - **65 à 80 s par clip de 35 s** avec `process` (l'encodage domine), **~15 min pour 12 clips**.
   En mode `live` : 26 à 42 s par clip de 30–40 s.
 - Disque : 2,4 Go/h (domingo, 1080p60) à 3,5 Go/h (gotaga). Buffer `live` de 45 min : ~3 Go.
+
+Mesuré sur le serveur Windows (AMD Ryzen 5 5500U, 10 Go) : **52 à 62 s par clip de 31 à 43 s**
+avec `process`, Whisper `small` compris (avant l'appel à Claude, non mesuré).
 
 **Le serveur est moins puissant.** Consigne : d'abord mesurer le temps par clip (lignes
 `✔ … en XXs` dans `autoclip.log`). Si c'est trop lent (la file du mode `live` grossit, ou plus de
