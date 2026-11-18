@@ -120,8 +120,9 @@ faster-whisper 1.2.1), **18/11/2026** :
 - `pytest` : 31/31 en ~110 s (après correction du test fMP4, voir plus bas).
 - Priorités vérifiées avec `Get-Process … .PriorityClass` : autoclip `BelowNormal`, un ffmpeg lancé
   avec `WIN_NORMAL` en `Normal`, un ffmpeg lancé sans (comme l'encodage des clips) en `BelowNormal`.
-- `autoclip check --live` : ffmpeg et Streamlink OK, **Whisper plante** tant que le runtime
-  Visual C++ n'est pas installé (l'invite admin a été refusée lors du premier essai).
+- `setup_windows.ps1` complet : runtime Visual C++ installé via winget (invite admin), modèle
+  Whisper `small` téléchargé, `autoclip check --live` tout OK (JLTomy vu en live). Sans ce
+  runtime, `ctranslate2.dll` ne se charge pas et Whisper plante.
 - Pas encore lancé : `install_task.ps1`, `autoclip live`, un vrai clip sous Windows.
 
 Méthodes de vérification utilisées (à refaire de la même façon) :
