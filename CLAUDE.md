@@ -154,10 +154,17 @@ faster-whisper 1.2.1), **18/11/2026** :
   happening », « fritz → frites ». À surveiller : une légende a écrit « Toma » au lieu de Tomy.
 - Pas encore lancé : `install_task.ps1`.
 - `autoclip top` : étapes 2 à 4 testées sur un vrai clip Etostark (« pauvre Fousseyd », 17 s,
-  URL `clips.twitch.tv/…` comme l'API la renvoie) : yt-dlp OK, clip entier en 1080x1920, titre de
-  Claude 3 s, légende avec crédit + lien, 33 s de traitement. **L'étape 1 (API Twitch) n'a pas
-  tourné pour de vrai** : pas encore d'appli Twitch (client_id / secret) ; testée avec une fausse
-  API seulement. Constat : si le clip a déjà des sous-titres incrustés par le streamer, ils
+  URL `clips.twitch.tv/…`) : yt-dlp OK, clip entier en 1080x1920, titre de Claude 3 s, légende
+  avec crédit + lien, 33 s de traitement.
+- `autoclip top --lang fr --count 3` **sur le vrai Twitch** (18/11/2026 20:34, appli Twitch de
+  l'utilisateur) : jeton OK, 4 catégories trouvées, ~500 clips par catégorie sur 24 h dont 17
+  (Just Chatting), 56 (GTA V), 27 (LoL), 55 (Valorant) en « fr ». Top 3 : MasterSnakou 1094 vues
+  (GTA, avion), Gotaga 1078 vues (Valorant), MasterSnakou 1070 vues (même VOD que le 1er mais
+  25 min plus tard : bien gardé). 5 min 14 pour les 3 (150 s pour le 1er, chargement de Whisper
+  compris, puis 64-69 s). L'API renvoie des URL `www.twitch.tv/<chaîne>/clip/<slug>` : yt-dlp OK.
+  Limites vues : sur un clip de jeu presque sans paroles (Gotaga, titre Twitch « x »), Claude n'a
+  que la transcription (« c'est un écouté thank you ») et l'accroche n'a pas de sens ; le 3e est
+  un clip auto d'un bot (« WzBot AutoCLIP », 60 s) créé depuis le compte du streameur. Constat : si le clip a déjà des sous-titres incrustés par le streamer, ils
   apparaissent en double ; la musique de fond s'ajoute aussi (réglage `[music]` commun).
 
 Méthodes de vérification utilisées (à refaire de la même façon) :
