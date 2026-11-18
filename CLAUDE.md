@@ -18,6 +18,28 @@ brouillons depuis son téléphone.
   (ni dans les commits). Les secrets vont dans `config.toml` (ignoré par git) ou dans les variables
   d'environnement `TWITCH_OAUTH_TOKEN`, `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`.
 
+## Travailler sur ce dépôt
+
+- `main` et `claude/affectionate-faraday-vx9g05` sont identiques depuis le 18/11/2026 : travailler
+  sur `main`.
+- Dépôt public : avant de commiter sur une nouvelle machine, régler l'e-mail masqué de GitHub
+  (`git config user.name "HugoPigree"` et
+  `git config user.email "116163096+HugoPigree@users.noreply.github.com"`), jamais un e-mail perso.
+- Pousser demande un token GitHub que l'utilisateur tape lui-même dans un vrai terminal (git ne
+  peut pas le demander depuis Claude Code). `git config credential.helper 'cache --timeout=3600'`
+  le garde 1 h en mémoire, ce qui permet ensuite à Claude de pousser. Ne jamais écrire le token dans
+  un fichier, une URL ou le chat.
+- Les enregistrements et les clips de test (domingo, gotaga, JLTomy) sont restés sur le PC de
+  l'école : sur une nouvelle machine, `recordings/` et `ready_to_post/` sont vides. `classement.md`
+  est un historique.
+
+## Retours de l'utilisateur sur les clips
+
+- Après le premier test : « sous-titres bien, mais ils manquent de contexte et de vie ». D'où
+  l'accroche incrustée, le `pre_roll` à 30 s, la musique et le zoom (ces deux derniers en option).
+- Critères de classement demandés : force du pic de chat, transcription intéressante sans
+  contexte, durée, début propre (voir `classement.md`).
+
 ## Décisions prises
 
 - Une seule chaîne pour l'instant : JLTomy.
@@ -81,6 +103,14 @@ ffmpeg 9.0.2, Streamlink 8.6.3, faster-whisper 1.2.1) :
   démarrage et d'arrêt. Aucun faux pic au démarrage, arrêt propre (dernier segment complet et
   lisible). Le chat est resté calme, donc aucun clip pendant cet essai : avec ce code, la détection
   d'un vrai pic après 5 min n'est couverte que par les tests unitaires.
+
+Méthodes de vérification utilisées (à refaire de la même façon) :
+- Synchro chat/vidéo : transcrire avec Whisper une minute autour d'un pic (`video.extract_audio` +
+  `subtitles.transcribe`), puis afficher seconde par seconde les mots prononcés face aux messages
+  de `chat.jsonl`. Un écho direct (mot dit puis repris par le chat) donne le décalage.
+- Mode continu sans attendre 45 min : une copie de la config avec `[live] segment_seconds = 60`,
+  `buffer_minutes = 5` et `[paths] export = "ready_to_post/_test_live"`, lancée avec
+  `timeout -s INT 1260 autoclip -c <copie> live`.
 
 ### Pas testé
 
