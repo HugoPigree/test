@@ -94,6 +94,15 @@ def cmd_process(cfg: Config, args) -> int:
     return 0 if clips else 1
 
 
+def cmd_top(cfg: Config, args) -> int:
+    from autoclip.top import run_top
+
+    clips = run_top(cfg, args.lang or cfg.top.lang, args.count or cfg.top.count)
+    for c in clips:
+        print(c)
+    return 0 if clips else 1
+
+
 def cmd_detect(cfg: Config, args) -> int:
     from autoclip.chat import load_chat
     from autoclip.peaks import activity_series, ascii_timeline, fmt_time
@@ -191,6 +200,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("session", help="dossier recordings/<session>")
     p.add_argument("--upload", action="store_true", help="upload TikTok ensuite")
     p.set_defaults(func=cmd_process)
+
+    p = sub.add_parser("top", help="top des clips Twitch du jour (API Twitch), prêts à poster")
+    p.add_argument("--lang", help="langue des clips (défaut : [top] lang, fr)")
+    p.add_argument("--count", type=int, help="nombre de clips (défaut : [top] count, 3)")
+    p.set_defaults(func=cmd_top)
 
     p = sub.add_parser("detect", help="affiche les pics détectés (réglage des seuils)")
     p.add_argument("session")

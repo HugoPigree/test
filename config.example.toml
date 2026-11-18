@@ -110,6 +110,17 @@ segment_seconds = 300
 buffer_minutes = 45
 cooldown = 90           # secondes minimum entre les pics de deux clips (anti-doublon)
 
+[top]
+# `autoclip top --lang fr --count 3` : top des clips Twitch des dernières 24 h (API Twitch).
+categories = ["Just Chatting", "Grand Theft Auto V", "League of Legends", "VALORANT"]  # noms exacts Twitch
+lang = "fr"
+count = 3
+pages = 5               # pages de 100 clips par catégorie (les plus vus d'abord)
+# Appli Twitch (https://dev.twitch.tv/console). Secrets : dans config.toml ou dans les variables
+# TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET, jamais dans ce fichier.
+client_id = ""
+client_secret = ""
+
 [tiktok]
 auto_upload = false     # true => upload automatique de chaque clip fini
 mode = "inbox"          # "inbox" (brouillon dans l'appli, sans audit) | "direct" (publication)

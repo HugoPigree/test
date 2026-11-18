@@ -30,6 +30,7 @@ chat IRC   ──► recordings/<session>/chat.jsonl ┴─► pics de chat ─�
 | `autoclip live` | **Mode continu**, pour un live qui ne s'arrête jamais (subathon) : enregistre en segments de 5 min en ne gardant que les 45 dernières minutes, analyse le chat en continu et coupe chaque clip pendant le live. Les clips sont traités un par un en priorité basse. Se relance tout seul après une coupure du stream ou du chat. Ctrl+C = arrêt, les clips déjà coupés sont terminés. |
 | `autoclip watch` | Attend que JLTomy lance son live, enregistre vidéo + chat, et génère les clips à la fin du live. Tourne en boucle. Ctrl+C = arrêt propre, la session en cours est quand même traitée. |
 | `autoclip record --duration 600 --process` | Enregistre 10 min maintenant puis traite la session (pratique pour tester pendant un live). |
+| `autoclip top --lang fr --count 3` | Top 3 des clips Twitch français des dernières 24 h (API Twitch), prêts à poster dans `ready_to_post/top_AAAA-MM-JJ_NN/`. Voir « Top des clips Twitch du jour ». |
 | `autoclip detect recordings/<session>` | Affiche la courbe du chat et les pics trouvés, sans rien encoder (pour régler les seuils). |
 | `autoclip process recordings/<session>` | (Re)génère les clips d'une session. Les clips déjà exportés ne sont pas réencodés. |
 | `autoclip tiktok-auth` | Connecte ton compte TikTok (une fois). |
@@ -66,6 +67,19 @@ chat IRC   ──► recordings/<session>/chat.jsonl ┴─► pics de chat ─�
 - **PC lent** : `subtitles.model = "base"`. **GPU NVIDIA** : `device = "cuda"`, `model = "medium"`.
 - **Pubs Twitch** : sans compte sub/Turbo, Streamlink saute les pubs, ce qui laisse des trous dans la vidéo. Renseigne `twitch.oauth_token` (cookie `auth-token` de twitch.tv) pour les éviter.
 - **Disque** : compte environ 2,5 à 3,5 Go par heure en 1080p60. En mode `live`, le buffer reste autour de 2 à 3 Go (`[live] buffer_minutes`, `segment_seconds`, et `cooldown` entre deux clips). `export.delete_raw = true` supprime l'enregistrement brut une fois tous les clips générés.
+
+## Top des clips Twitch du jour
+
+`autoclip top --lang fr --count 3` prépare le top 3 des clips Twitch français des dernières 24 h :
+
+1. API Twitch officielle (Get Clips) sur les catégories de `[top] categories` (noms exacts Twitch, ex. `Just Chatting`, `Grand Theft Auto V`, `League of Legends`, `VALORANT`) ; on garde la langue demandée, on enlève les doublons (même clip, ou même moment du même live clippé par plusieurs viewers), on trie par vues.
+2. Téléchargement avec yt-dlp.
+3. Pipeline habituel sur le clip **entier** (60 s max, pas recoupé) : 9:16, sous-titres Whisper, titre d'accroche les 3 premières secondes (écrit par Claude s'il est connecté).
+4. `ready_to_post/top_AAAA-MM-JJ_01` à `03` : `video.mp4`, `caption.txt` (« Clip de <chaîne>, créé par <clippeur>. Source : Twitch <lien> »), `meta.json` (vues, lien d'origine, chaîne, réponse complète de l'API dans `twitch_clip`). Relancer le même jour ne refait pas un clip déjà prêt et n'écrase pas un dossier existant.
+
+Rien n'est envoyé sur TikTok (même avec `tiktok.auto_upload`) ; `autoclip upload` les enverrait en brouillons comme les autres clips.
+
+Il faut une appli Twitch (gratuite) : sur https://dev.twitch.tv/console, « Register Your Application », URL de redirection `http://localhost`, catégorie « Application Integration », type « Confidential ». Mets le **Client ID** et un **Client Secret** dans `config.toml`, section `[top]` (`client_id`, `client_secret`), ou dans les variables `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET`. Jamais dans le dépôt.
 
 ## Upload TikTok
 

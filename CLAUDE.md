@@ -85,6 +85,7 @@ brouillons depuis son téléphone.
 | `autoclip/subtitles.py` | faster-whisper (`hotwords` = vocabulaire + titre du live, puis `fixes`), recollage des élisions, ASS : mot qui « saute », titre qui rebondit, chat qui défile en bas à gauche (`pick_chat`). |
 | `autoclip/context.py` | Titre, légende, hashtags et corrections de mots écrits par Claude via `claude -p --model haiku --tools "" --json-schema …` (abonnement Claude de l'utilisateur, pas de clé API), lancé dans un dossier vide. Si Claude manque ou échoue : `None`, et le pipeline reprend l'ancienne accroche. |
 | `autoclip/live.py` | Mode continu : un thread `_watch` par chaîne (`streamlink --stdout` → `ffmpeg -f segment` en MPEG-TS, purge du buffer, détection toutes les 5 s, découpe depuis les segments) et un seul `_worker` pour toutes les chaînes, en priorité basse. Chaque tâche de la file emporte la config de sa chaîne (`channel_config`). |
+| `autoclip/top.py` | `autoclip top --lang fr --count 3` (demandé le 18/11/2026) : API Helix (jeton d'appli, Get Games puis Get Clips 24 h par catégorie de `[top] categories`), filtre langue, doublons (id, ou même VOD à < 60 s), tri par vues ; yt-dlp ; `process_peak` sur le clip entier (60 s max, accroche 3 s, pas de zoom ni de chat) ; `ready_to_post/top_AAAA-MM-JJ_NN/` avec crédit streamer + clippeur + lien dans `caption.txt`, vues / lien / chaîne dans `meta.json`. Jamais d'upload TikTok. Identifiants : `[top] client_id / client_secret` ou `TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET`. |
 | `autoclip/tiktok.py` | OAuth + Content Posting API (`inbox` / `direct`). **Jamais testé en vrai.** |
 | `scripts/setup_server.sh` | Installation idempotente, sans sudo (venv, dépendances, modèle Whisper, config, check). |
 | `scripts/run_tmux.sh` | Lance `autoclip live` (par défaut) dans la session tmux `autoclip`. |
@@ -151,7 +152,13 @@ faster-whisper 1.2.1), **18/11/2026** :
   trois ronds-points de Miami », « JLTomy répond au chat qui attend du happening ». Légendes au
   ton naturel, hashtags liés au contenu (#miami, #rondpoint…), corrections « appending →
   happening », « fritz → frites ». À surveiller : une légende a écrit « Toma » au lieu de Tomy.
-- Pas encore lancé : `install_task.ps1`, `autoclip live` (ni à une ni à deux chaînes).
+- Pas encore lancé : `install_task.ps1`.
+- `autoclip top` : étapes 2 à 4 testées sur un vrai clip Etostark (« pauvre Fousseyd », 17 s,
+  URL `clips.twitch.tv/…` comme l'API la renvoie) : yt-dlp OK, clip entier en 1080x1920, titre de
+  Claude 3 s, légende avec crédit + lien, 33 s de traitement. **L'étape 1 (API Twitch) n'a pas
+  tourné pour de vrai** : pas encore d'appli Twitch (client_id / secret) ; testée avec une fausse
+  API seulement. Constat : si le clip a déjà des sous-titres incrustés par le streamer, ils
+  apparaissent en double ; la musique de fond s'ajoute aussi (réglage `[music]` commun).
 
 Méthodes de vérification utilisées (à refaire de la même façon) :
 - Synchro chat/vidéo : transcrire avec Whisper une minute autour d'un pic (`video.extract_audio` +

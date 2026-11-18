@@ -181,6 +181,20 @@ class TikTokConfig:
 
 
 @dataclass
+class TopConfig:
+    # `autoclip top` : catégories où chercher les clips des dernières 24 h (noms exacts Twitch).
+    categories: list[str] = field(default_factory=lambda: [
+        "Just Chatting", "Grand Theft Auto V", "League of Legends", "VALORANT"])
+    lang: str = "fr"
+    count: int = 3
+    pages: int = 5          # pages de 100 clips par catégorie (les plus vus d'abord)
+    # Appli Twitch (dev.twitch.tv/console). Secrets : config.toml ou TWITCH_CLIENT_ID /
+    # TWITCH_CLIENT_SECRET, jamais dans le dépôt.
+    client_id: str = ""
+    client_secret: str = ""
+
+
+@dataclass
 class Config:
     twitch: TwitchConfig = field(default_factory=TwitchConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
@@ -192,6 +206,7 @@ class Config:
     music: MusicConfig = field(default_factory=MusicConfig)
     live: LiveConfig = field(default_factory=LiveConfig)
     tiktok: TikTokConfig = field(default_factory=TikTokConfig)
+    top: TopConfig = field(default_factory=TopConfig)
 
 
 def _merge(obj: Any, data: dict[str, Any], prefix: str = "") -> None:
@@ -221,6 +236,8 @@ def load_config(path: str | Path | None = None) -> Config:
     cfg.tiktok.client_key = os.environ.get("TIKTOK_CLIENT_KEY", cfg.tiktok.client_key)
     cfg.tiktok.client_secret = os.environ.get("TIKTOK_CLIENT_SECRET", cfg.tiktok.client_secret)
     cfg.twitch.oauth_token = os.environ.get("TWITCH_OAUTH_TOKEN", cfg.twitch.oauth_token)
+    cfg.top.client_id = os.environ.get("TWITCH_CLIENT_ID", cfg.top.client_id)
+    cfg.top.client_secret = os.environ.get("TWITCH_CLIENT_SECRET", cfg.top.client_secret)
     set_channels(cfg, cfg.twitch.channels or [cfg.twitch.channel])
     return cfg
 
