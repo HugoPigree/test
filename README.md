@@ -121,6 +121,36 @@ le journal dans `autoclip.log`.
 - Après une mise à jour du code : `git pull`, `scripts/setup_server.sh`, puis arrêter autoclip
   (`tmux attach -t autoclip`, Ctrl+C) et relancer `scripts/run_tmux.sh`.
 
+## Déploiement sur un serveur Windows
+
+Windows natif, sans WSL (une VM Linux en plus consomme trop pour un petit serveur). Mettre le
+dépôt dans un dossier à chemin court (ex. `C:\Users\<toi>\autoclip`) et activer les chemins longs
+pour git : `git -c core.longpaths=true clone …`.
+
+**1. Installer** (relançable, installe ffmpeg avec winget s'il manque, le reste dans `.venv`) :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1
+```
+
+**2. Relance automatique** (remplace tmux) : dans un PowerShell **en administrateur**,
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install_task.ps1
+```
+
+Ça crée la tâche planifiée `autoclip` : `autoclip live` démarre avec le PC, même sans session
+ouverte, et repart dans les 5 min s'il s'arrête. Le traitement des clips tourne en priorité
+« inférieure à la normale », Streamlink et l'enregistrement en priorité normale.
+
+- Voir : `Get-ScheduledTask autoclip | Get-ScheduledTaskInfo`, journal `autoclip.log`, plantages
+  dans `autoclip-erreurs.log`.
+- Arrêter : `Disable-ScheduledTask autoclip; Stop-ScheduledTask autoclip`. C'est un arrêt sec :
+  les clips en file d'attente ne sont pas terminés. Pour un arrêt propre, lancer plutôt
+  `.venv\Scripts\autoclip live` à la main dans un terminal et faire Ctrl+C.
+- Relancer : `Enable-ScheduledTask autoclip; Start-ScheduledTask autoclip`.
+- Après une mise à jour du code : `git pull`, `scripts\setup_windows.ps1`, puis arrêter et relancer.
+
 ## Droits
 
 Ces clips utilisent le contenu de JLTomy. Avant de les publier, vérifie que tu as son accord ou qu'il autorise les comptes de clips. Sans ça, TikTok peut retirer les vidéos ou bloquer le compte pour violation de droits d'auteur.

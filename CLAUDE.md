@@ -48,8 +48,12 @@ brouillons depuis son téléphone.
   d'attente traitée en `nice`).
 - Les clips arrivent en brouillons TikTok, postés à la main depuis le téléphone. Au début, 1 à 2
   clips postés par jour.
-- Machine cible : un serveur Linux peu puissant, toujours allumé, piloté à distance
-  (`/remote-control`). Lancement dans tmux : `scripts/run_tmux.sh` (voir README, « Déploiement »).
+- Machine cible (depuis le 18/11/2026) : un **serveur Windows** peu puissant, toujours allumé,
+  piloté à distance (`/remote-control`). **Windows natif, pas WSL2** (la VM consomme trop). Dépôt
+  dans `C:\Users\hpigr\autoclip\twitch-autoclip` (chemin court, `core.longpaths = true`).
+  Installation : `scripts\setup_windows.ps1`. Relance automatique : tâche planifiée `autoclip`
+  créée par `scripts\install_task.ps1` (au démarrage + toutes les 5 min, ignorée si déjà lancée).
+  Les scripts Linux (`setup_server.sh`, `run_tmux.sh`) restent pour un éventuel serveur Linux.
 
 ## Architecture
 
@@ -67,6 +71,12 @@ brouillons depuis son téléphone.
 | `autoclip/tiktok.py` | OAuth + Content Posting API (`inbox` / `direct`). **Jamais testé en vrai.** |
 | `scripts/setup_server.sh` | Installation idempotente, sans sudo (venv, dépendances, modèle Whisper, config, check). |
 | `scripts/run_tmux.sh` | Lance `autoclip live` (par défaut) dans la session tmux `autoclip`. |
+| `scripts/setup_windows.ps1` | Équivalent Windows de `setup_server.sh` (installe ffmpeg et le runtime Visual C++ via winget s'ils manquent ; sans ce runtime, `ctranslate2.dll` ne se charge pas et Whisper plante). |
+| `scripts/install_task.ps1` | Tâche planifiée `autoclip` (S4U, sans session ouverte) qui remplace tmux. À lancer en admin. |
+
+Priorité basse sous Windows : `live._lower_priority` passe tout le process autoclip en
+« inférieure à la normale » (une priorité de thread ne passe pas aux enfants), et `Recording`
+lance Streamlink et le ffmpeg du buffer avec `NORMAL_PRIORITY_CLASS` (`WIN_NORMAL`).
 
 Fichiers produits (tous ignorés par git) :
 - `recordings/<chaîne>_<date>/` : `stream.ts`, `chat.jsonl`, `session.json` (`record` / `watch`).
@@ -103,6 +113,16 @@ ffmpeg 9.0.2, Streamlink 8.6.3, faster-whisper 1.2.1) :
   démarrage et d'arrêt. Aucun faux pic au démarrage, arrêt propre (dernier segment complet et
   lisible). Le chat est resté calme, donc aucun clip pendant cet essai : avec ce code, la détection
   d'un vrai pic après 5 min n'est couverte que par les tests unitaires.
+
+Sur le serveur Windows (Windows 11 Pro, Python 3.12.10, ffmpeg 9.0.2 Gyan, Streamlink 8.6.3,
+faster-whisper 1.2.1), **18/11/2026** :
+
+- `pytest` : 31/31 en ~110 s (après correction du test fMP4, voir plus bas).
+- Priorités vérifiées avec `Get-Process … .PriorityClass` : autoclip `BelowNormal`, un ffmpeg lancé
+  avec `WIN_NORMAL` en `Normal`, un ffmpeg lancé sans (comme l'encodage des clips) en `BelowNormal`.
+- `autoclip check --live` : ffmpeg et Streamlink OK, **Whisper plante** tant que le runtime
+  Visual C++ n'est pas installé (l'invite admin a été refusée lors du premier essai).
+- Pas encore lancé : `install_task.ps1`, `autoclip live`, un vrai clip sous Windows.
 
 Méthodes de vérification utilisées (à refaire de la même façon) :
 - Synchro chat/vidéo : transcrire avec Whisper une minute autour d'un pic (`video.extract_audio` +
@@ -153,6 +173,11 @@ Autres pièges connus :
 - `process` ne réencode pas un clip dont `video.mp4` existe déjà : supprimer son dossier pour le
   régénérer.
 - La police « Arial Black » est souvent absente sous Linux : libass prend une police grasse proche.
+- Windows : le muxer HLS de ffmpeg n'écrit pas `init.mp4` à côté de la playlist quand on lui donne
+  un chemin avec des `\` (il l'écrit dans le dossier courant). Le test fMP4 lance donc ffmpeg
+  depuis le dossier `hls`.
+- Windows : `os.setpriority` n'existe pas ; via ctypes, il faut déclarer les types du handle
+  (sinon il est tronqué à 32 bits et `SetPriorityClass` échoue sans rien dire).
 
 ## Performance
 
