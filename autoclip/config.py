@@ -157,10 +157,12 @@ class LiveConfig:
 
 @dataclass
 class MusicConfig:
-    # Musique de fond prise au hasard dans `dir`, baissée automatiquement quand quelqu'un parle.
+    # Musique de fond prise au hasard dans `dir`, un peu baissée quand quelqu'un parle.
     enabled: bool = True
     dir: str = "music"
-    volume: float = 0.10
+    # Niveau de la musique sous le son du live, en dB (les deux sont normalisés à -14 LUFS avant).
+    # -24 : bien présente ; -26 : fond discret (défaut) ; -28 : à peine audible sur un téléphone.
+    level_db: float = -26.0
 
 
 @dataclass

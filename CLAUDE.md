@@ -47,6 +47,15 @@ brouillons depuis son téléphone.
   musique de fond. D'où `context.py` (Claude), le vocabulaire Whisper, le chat incrusté, les
   animations, et musique + zoom activés par défaut. L'utilisateur fournit lui-même les musiques
   libres de droits (dossier `music/`).
+- **18/11/2026, soir, après les clips du test live** : « la musique est trop présente, elle prend
+  le dessus, fais attention à ça overall ». Mesure (son d'origine récupéré sur la VOD, loudness
+  short-term seconde par seconde) : avec l'ancien mixage (volume 0.10 brut + ducking ratio 8),
+  la musique était 20 dB sous le live en moyenne, mais **remontait dès que le live se calmait**
+  (jusqu'à 3 dB au-dessus du live) et faisait le yo-yo (18 dB d'écart). Nouveau mixage
+  (`video.music_mix_filter`) : morceau normalisé à -14 LUFS puis `level_db` (-26), ducking léger
+  (ratio 3), live en `loudnorm` LRA=5. Résultat sur 5 clips Etostark : musique jamais à moins de
+  8,7 dB du live, 18 à 33 dB dessous en médiane. La boucle de 8 s « funky victory loop » est
+  retirée (`music/retires/`, ignoré). Ne pas remonter la musique sans le demander.
 - Outils existants regardés (18/11/2026) : OpenShorts, AI-Youtube-Shorts-Generator et clones
   choisissent les moments eux-mêmes avec une IA (on perdrait la détection par le chat) ; pycaps
   (sous-titres animés) est en alpha et rend via Chromium, trop lourd ici ; Submagic / OpusClip
@@ -153,6 +162,13 @@ faster-whisper 1.2.1), **18/11/2026** :
   ton naturel, hashtags liés au contenu (#miami, #rondpoint…), corrections « appending →
   happening », « fritz → frites ». À surveiller : une légende a écrit « Toma » au lieu de Tomy.
 - Pas encore lancé : `install_task.ps1`.
+- Bandes son de 5 clips Etostark du test live refaites (musique changée, nouveau mixage) à partir
+  de la **VOD Twitch** : yt-dlp `--download-sections` sur l'audio, calage par corrélation croisée
+  avec le son du clip (écart constant de 1,92 s entre notre horloge et la VOD, corrélation 0,71 à
+  0,96), image non réencodée, ancienne version gardée en `video_ancien.mp4`. 2 clips (19h56 et
+  19h58) **impossibles** : ces passages sont muets dans la VOD (Twitch les a coupés, sûrement pour
+  de la musique protégée dans ce qu'Etostark regardait) ; ils restent avec l'ancien mixage et
+  risquent aussi un blocage sur TikTok.
 - `autoclip top` : étapes 2 à 4 testées sur un vrai clip Etostark (« pauvre Fousseyd », 17 s,
   URL `clips.twitch.tv/…`) : yt-dlp OK, clip entier en 1080x1920, titre de Claude 3 s, légende
   avec crédit + lien, 33 s de traitement.

@@ -155,7 +155,7 @@ def process_peak(cfg: Config, session: dict, meta: dict, peak: Peak, index: int,
     video.render_clip(src, peak.start, dur, tmp, cfg.vertical, meta["width"], meta["height"],
                       ass_path=ass_path, has_audio=meta["has_audio"],
                       zoom_at=(peak.t_peak - peak.start) if cfg.vertical.peak_zoom else None,
-                      music=music, music_volume=cfg.music.volume)
+                      music=music, music_level_db=cfg.music.level_db)
     tmp.replace(final)
     video.thumbnail(final, out_dir / "thumbnail.jpg", at=min(dur - 0.5, peak.t_peak - peak.start - 3))
     if cfg.export.keep_horizontal:

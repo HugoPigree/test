@@ -101,7 +101,7 @@ delete_raw = false      # true => supprime l'enregistrement brut après `process
 [music]
 enabled = true          # musique de fond prise au hasard dans `dir` (mp3, m4a, wav…), si le dossier en a
 dir = "music"           # musiques libres de droits uniquement
-volume = 0.10           # ~10 %, baissée automatiquement quand quelqu'un parle
+level_db = -26.0        # dB sous le son du live (-24 plus présente, -28 à peine audible)
 
 [live]
 # Mode continu (`autoclip live`) : le live est découpé en segments et seules les dernières
