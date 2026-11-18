@@ -146,8 +146,12 @@ faster-whisper 1.2.1), **18/11/2026** :
   zoom au pic, chat qui défile en bas à gauche. Constat : sans Claude, l'accroche n'a pas de sens
   (« j'ai même pas dépassé l'induit économe… ») et Whisper se trompe sur l'audio de voiture
   (« weepinnt », « l'induit »).
-- Pas encore lancé : `install_task.ps1`, `autoclip live`, **Claude réel** (`context.py` n'est testé
-  qu'avec un faux `claude`).
+- Mêmes 3 clips **avec Claude** (connecté, `haiku`) : 61 à 64 s par clip, appel à Claude compris.
+  Titres obtenus : « JLTomy accélère à fond, le chat craint la panne », « JLTomy vante un des
+  trois ronds-points de Miami », « JLTomy répond au chat qui attend du happening ». Légendes au
+  ton naturel, hashtags liés au contenu (#miami, #rondpoint…), corrections « appending →
+  happening », « fritz → frites ». À surveiller : une légende a écrit « Toma » au lieu de Tomy.
+- Pas encore lancé : `install_task.ps1`, `autoclip live` (ni à une ni à deux chaînes).
 
 Méthodes de vérification utilisées (à refaire de la même façon) :
 - Synchro chat/vidéo : transcrire avec Whisper une minute autour d'un pic (`video.extract_audio` +
