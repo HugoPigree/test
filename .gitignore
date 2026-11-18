@@ -11,3 +11,4 @@ music/
 candidates/
 heartbeat.json
 *.log.*
+radar_quota.json

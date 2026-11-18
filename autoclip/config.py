@@ -168,6 +168,34 @@ class DailyConfig:
 
 
 @dataclass
+class QualityConfig:
+    # Score de qualité des candidates (0-100) : somme pondérée des signaux (ramenée sur 100),
+    # moins les pénalités. Chaque signal vaut ses points pleins à la valeur « *_full ».
+    weight_chat: float = 25      # force du pic de chat
+    weight_viewers: float = 15   # viewers distincts qui écrivent autour du pic
+    weight_voice: float = 20     # pic de volume de la voix autour du moment (ffmpeg)
+    weight_speech: float = 20    # densité de parole (Whisper)
+    weight_sentence: float = 20  # le clip commence sur une phrase complète (Whisper)
+    chat_score_full: float = 15.0
+    viewers_full: int = 250       # JLTomy le 18/11 : 38 à 355 viewers distincts autour d'un pic
+    voice_db_full: float = 12.0  # dB au-dessus de la médiane du clip
+    speech_wps_full: float = 2.5  # mots par seconde
+    penalty_duration: float = 20  # durée hors 15-60 s
+    penalty_silence: float = 15   # plus de `silence_max` du clip sans voix
+    silence_max: float = 0.5
+    silence_lufs: float = -45.0   # en dessous (bande de la voix) = silence
+    penalty_live_start: float = 15  # pic dans les premières minutes du live ou après une coupure
+    live_start_minutes: float = 5.0
+    penalty_pause: float = 25     # moins de `pause_max_words` mots dans le clip
+    pause_max_words: int = 5
+    penalty_nearby: float = 10    # une meilleure candidate de la même chaîne à moins de min_gap_minutes
+    # Plus tard : une IA. "module:fonction" appelée avec (candidate, mesures), qui renvoie None ou
+    # {"points": 0..1, "detail": "..."}, comptée avec `weight_external`. Vide = rien d'externe.
+    external: str = ""
+    weight_external: float = 0
+
+
+@dataclass
 class MusicConfig:
     # Musique de fond prise au hasard dans `dir`, un peu baissée quand quelqu'un parle.
     enabled: bool = True
@@ -212,6 +240,21 @@ class TopConfig:
 
 
 @dataclass
+class RadarConfig:
+    # `autoclip top --radar` : radar GTA 6 (Twitch, YouTube, Reddit), rien n'est téléchargé.
+    count: int = 20
+    twitch_game: str = "Grand Theft Auto VI"
+    twitch_pages: int = 5           # pages de 100 clips (l'API ne les trie pas strictement)
+    youtube_query: str = "GTA 6"
+    youtube_api_key: str = ""       # secret : config.toml ou YOUTUBE_API_KEY, jamais dans Git
+    youtube_max_searches_per_day: int = 20  # 100 unités par recherche, 10 000 gratuites par jour
+    reddit_subreddit: str = "GTA6"
+    reddit_client_id: str = ""      # facultatif (sinon adresse .json publique) ; REDDIT_CLIENT_ID
+    reddit_client_secret: str = ""  # REDDIT_CLIENT_SECRET
+    reddit_user_agent: str = "autoclip-radar/0.1"
+
+
+@dataclass
 class Config:
     twitch: TwitchConfig = field(default_factory=TwitchConfig)
     paths: PathsConfig = field(default_factory=PathsConfig)
@@ -223,8 +266,10 @@ class Config:
     music: MusicConfig = field(default_factory=MusicConfig)
     live: LiveConfig = field(default_factory=LiveConfig)
     daily: DailyConfig = field(default_factory=DailyConfig)
+    quality: QualityConfig = field(default_factory=QualityConfig)
     tiktok: TikTokConfig = field(default_factory=TikTokConfig)
     top: TopConfig = field(default_factory=TopConfig)
+    radar: RadarConfig = field(default_factory=RadarConfig)
 
 
 def _merge(obj: Any, data: dict[str, Any], prefix: str = "") -> None:
@@ -256,6 +301,9 @@ def load_config(path: str | Path | None = None) -> Config:
     cfg.twitch.oauth_token = os.environ.get("TWITCH_OAUTH_TOKEN", cfg.twitch.oauth_token)
     cfg.top.client_id = os.environ.get("TWITCH_CLIENT_ID", cfg.top.client_id)
     cfg.top.client_secret = os.environ.get("TWITCH_CLIENT_SECRET", cfg.top.client_secret)
+    cfg.radar.youtube_api_key = os.environ.get("YOUTUBE_API_KEY", cfg.radar.youtube_api_key)
+    cfg.radar.reddit_client_id = os.environ.get("REDDIT_CLIENT_ID", cfg.radar.reddit_client_id)
+    cfg.radar.reddit_client_secret = os.environ.get("REDDIT_CLIENT_SECRET", cfg.radar.reddit_client_secret)
     set_channels(cfg, cfg.twitch.channels or [cfg.twitch.channel])
     return cfg
 

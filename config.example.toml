@@ -120,6 +120,32 @@ selection_time = "23:00"  # heure du tri (heure du PC) ; rattrapé au redémarra
 retention_hours = 48    # les candidates non retenues sont supprimées après ce délai
 max_disk_gb = 20        # taille max de candidates/ (les moins bonnes sont supprimées d'abord)
 
+[quality]
+# Score de qualité des candidates (0-100) = somme pondérée des signaux (ramenée sur 100) - pénalités.
+# Le détail de chaque signal est écrit dans meta.json et classement.md.
+weight_chat = 25        # force du pic de chat
+weight_viewers = 15     # viewers distincts qui écrivent autour du pic
+weight_voice = 20       # pic de volume de la voix autour du moment (ffmpeg)
+weight_speech = 20      # densité de parole (Whisper)
+weight_sentence = 20    # le clip commence sur une phrase complète (Whisper)
+chat_score_full = 15.0  # valeur qui donne tous les points de chaque signal
+viewers_full = 250      # JLTomy le 18/11 : 38 à 355 viewers distincts autour d'un pic
+voice_db_full = 12.0    # dB au-dessus de la médiane du clip
+speech_wps_full = 2.5   # mots par seconde
+penalty_duration = 20   # durée hors 15-60 s
+penalty_silence = 15    # plus de `silence_max` du clip sans voix (sous `silence_lufs`)
+silence_max = 0.5
+silence_lufs = -45.0
+penalty_live_start = 15 # pic dans les `live_start_minutes` après le début du live ou une coupure
+live_start_minutes = 5.0
+penalty_pause = 25      # moins de `pause_max_words` mots dans tout le clip
+pause_max_words = 5
+penalty_nearby = 10     # meilleure candidate de la même chaîne à moins de [daily] min_gap_minutes
+# Plus tard, une IA : "module:fonction" appelée avec (candidate, mesures), qui renvoie None ou
+# {"points": 0..1, "detail": "..."} ; comptée avec weight_external. Vide = rien d'externe.
+external = ""
+weight_external = 0
+
 [top]
 # `autoclip top --lang fr --count 3` : top des clips Twitch des dernières 24 h (API Twitch).
 top_games = 100         # cherche aussi dans les 100 catégories les plus regardées du moment (0 = non)
@@ -144,3 +170,17 @@ privacy_level = "SELF_ONLY"        # mode direct : privé tant que l'appli n'est
 disable_comment = false
 disable_duet = false
 disable_stitch = false
+
+[radar]
+# `autoclip top --radar` : radar GTA 6 des 24 dernières heures (Twitch, YouTube, Reddit) dans
+# ready_to_post/AAAA-MM-JJ/radar.md. Rien n'est téléchargé ni reposté.
+count = 20
+twitch_game = "Grand Theft Auto VI"   # identifiants Twitch : ceux de [top]
+twitch_pages = 5                      # pages de 100 clips (l'API ne les trie pas strictement)
+youtube_query = "GTA 6"
+youtube_api_key = ""                  # secret (YouTube Data API v3) : ici ou YOUTUBE_API_KEY, jamais dans Git
+youtube_max_searches_per_day = 20     # 100 unités par recherche, 10 000 gratuites par jour
+reddit_subreddit = "GTA6"
+reddit_client_id = ""                 # facultatif (sinon l'adresse .json publique) ; REDDIT_CLIENT_ID
+reddit_client_secret = ""             # REDDIT_CLIENT_SECRET
+reddit_user_agent = "autoclip-radar/0.1"

@@ -232,13 +232,29 @@ def _children_die_with_me() -> None:
     _JOB = job
 
 
+WHISPER = threading.Lock()  # un seul Whisper à la fois : mesures des candidates ou tri
+
+
 def _selection(cfg: Config, now: datetime) -> None:
     """Tri quotidien, dans son propre thread, en priorité basse (Whisper + encodage)."""
     _lower_priority()
     try:
-        daily.run_selection(cfg, now)
+        with WHISPER:
+            daily.run_selection(cfg, now)
     except Exception:  # noqa: BLE001 - un tri raté ne doit pas arrêter la surveillance
         log.exception("Tri quotidien raté")
+
+
+def _measurer(cfg: Config, stop: threading.Event) -> None:
+    """Mesure les nouvelles candidates une par une (score de qualité), en priorité basse."""
+    _lower_priority()
+    while not stop.is_set():
+        try:
+            if daily.measure_pending(cfg, WHISPER, limit=1):
+                continue
+        except Exception:  # noqa: BLE001 - une mesure ratée n'arrête rien
+            log.exception("Mesure d'une candidate ratée")
+        stop.wait(30)
 
 
 def _cut(cfg: Config, rec: Recording, peak: Peak, queue_dir: Path, metadata: dict,
@@ -260,7 +276,7 @@ def _cut(cfg: Config, rec: Recording, peak: Peak, queue_dir: Path, metadata: dic
         return None
     chat = [m for m in messages if peak.start - 5 <= m["ts"] <= peak.end + 5]
     return {"name": name, "raw": raw, "peak": clip, "start_ts": rec.start_ts + offset,
-            "metadata": metadata, "chat": chat, "cfg": cfg}
+            "metadata": metadata, "chat": chat, "cfg": cfg, "connexion_debut": rec.start_ts}
 
 
 def channel_config(cfg: Config, channel: str) -> Config:
@@ -365,6 +381,7 @@ def run_live(cfg: Config, heartbeat: Path = Path("heartbeat.json")) -> int:
              cfg.daily.selection_time, cfg.daily.max_clips_per_day)
     for w in watchers:
         w.start()
+    threading.Thread(target=_measurer, args=(cfg, stop), daemon=True, name="mesures").start()
     selecting: threading.Thread | None = None
     next_beat = next_clean = 0.0
     code = 0

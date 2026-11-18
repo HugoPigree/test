@@ -109,16 +109,47 @@ def save_candidate(cfg: Config, job: dict, peak_abs: Peak) -> Path | None:
          "t_peak_abs": peak_abs.t_peak, "start_ts": job["start_ts"] + offset,
          "peak": peak.to_dict(), "score": peak.score, "duration": round(peak.end - peak.start, 1),
          "reason": reason(peak), "metadata": job["metadata"], "chat": job["chat"],
-         "status": "candidate"}
+         "connexion_debut": job.get("connexion_debut"), "status": "candidate"}
     save(c)
     log.info("[%s] Candidate %s (score %.1f, %.0f s)", c["channel"], name, c["score"], c["duration"])
     return c["_json"]
 
 
+def rank_key(c: dict) -> tuple:
+    """Score de qualité (0-100) s'il est calculé, sinon la force du pic de chat. À égalité
+    (deux clips ramenés à 0 par les pénalités, par ex.), le score avant pénalités départage."""
+    q = c.get("qualite")
+    return (q["total"], q["base"], c["score"]) if q else (c["score"],)
+
+
+def measure_pending(cfg: Config, lock=None, limit: int | None = None) -> int:
+    """Mesure (ffmpeg + Whisper) les candidates qui ne l'ont pas encore été ; renvoie leur nombre.
+    `lock` évite de faire tourner Whisper en même temps que le tri."""
+    from contextlib import nullcontext
+
+    from autoclip import quality
+
+    done = 0
+    for c in load_candidates(cfg):
+        if c["status"] != "candidate" or "mesures" in c:
+            continue
+        if limit is not None and done >= limit:
+            break
+        with lock or nullcontext():
+            if not (c["_json"].parent / c["raw"]).exists():
+                continue
+            c["mesures"] = quality.measure(cfg, c)
+            save(c)
+            log.info("[%s] Candidate %s mesurée : %d/100 avant le tri", c["channel"], c["name"],
+                     quality.score(cfg, c)["total"])
+        done += 1
+    return done
+
+
 def pick(cands: list[dict], n: int, min_gap_s: float) -> list[dict]:
     """Les n meilleurs scores, au moins `min_gap_s` entre deux clips d'une même chaîne."""
     chosen: list[dict] = []
-    for c in sorted(cands, key=lambda c: c["score"], reverse=True):
+    for c in sorted(cands, key=rank_key, reverse=True):
         if len(chosen) >= n:
             break
         if all(c["channel"] != k["channel"] or abs(c["t_peak_abs"] - k["t_peak_abs"]) >= min_gap_s
@@ -151,13 +182,17 @@ def next_selection(cfg: Config, now: datetime) -> datetime:
 
 def run_selection(cfg: Config, now: datetime) -> Path:
     """Tri du jour : rendu complet des meilleures candidates + classement.md."""
+    from autoclip import quality
     from autoclip.live import channel_config
     from autoclip.pipeline import process_peak, upload_clips
 
     day = f"{now:%Y-%m-%d}"
     out_root = Path(cfg.paths.export) / day
     out_root.mkdir(parents=True, exist_ok=True)
+    measure_pending(cfg)  # celles que le fil de mesure n'a pas encore vues
     cands = [c for c in load_candidates(cfg) if c["status"] == "candidate"]
+    for c in cands:
+        c["qualite"] = quality.score(cfg, c, cands)
     chosen = pick(cands, cfg.daily.max_clips_per_day, cfg.daily.min_gap_minutes * 60)
     log.info("Tri du %s : %d candidate(s), %d retenue(s)", day, len(cands), len(chosen))
     rows = []
@@ -172,7 +207,11 @@ def run_selection(cfg: Config, now: datetime) -> Path:
                        "metadata": c["metadata"]}
             out = process_peak(ccfg, session, video.probe(raw), Peak(**c["peak"]), rank, name=name,
                                messages=c["chat"])
-            hook = json.loads((out / "meta.json").read_text(encoding="utf-8")).get("hook", "")
+            meta_path = out / "meta.json"
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            hook = meta.get("hook", "")
+            meta.update(rang=rank, qualite=c["qualite"], mesures=c.get("mesures"), raison=c["reason"])
+            meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
             c.update(status="selected", output=str(out))
             if cfg.tiktok.auto_upload:
                 upload_clips(ccfg, [out])
@@ -182,30 +221,63 @@ def run_selection(cfg: Config, now: datetime) -> Path:
         raw.unlink(missing_ok=True)
         save(c)
         rows.append((rank, c, hook))
+    rejected = []
     for c in cands:
         if c not in chosen:
             c["status"] = "rejected"
             save(c)
-    write_ranking(cfg, out_root / "classement.md", day, rows, len(cands))
+            rejected.append(c)
+    write_ranking(cfg, out_root / "classement.md", day, rows, len(cands), rejected, chosen)
     state = read_state(cfg)
     state["last_selection"] = day
     (candidates_dir(cfg) / STATE).write_text(json.dumps(state), encoding="utf-8")
     return out_root
 
 
-def write_ranking(cfg: Config, path: Path, day: str, rows: list, n_cands: int) -> None:
+def _why_not(cfg: Config, c: dict, chosen: list[dict]) -> str:
+    gap = cfg.daily.min_gap_minutes * 60
+    for k in chosen:
+        if k["channel"] == c["channel"] and abs(k["t_peak_abs"] - c["t_peak_abs"]) < gap:
+            return (f"à {abs(k['t_peak_abs'] - c['t_peak_abs']) / 60:.0f} min d'un clip retenu mieux "
+                    f"classé ({datetime.fromtimestamp(k['t_peak_abs']):%H:%M})")
+    if len(chosen) >= cfg.daily.max_clips_per_day:
+        return f"quota de {cfg.daily.max_clips_per_day} clips atteint, score plus bas"
+    return "score trop bas"
+
+
+def write_ranking(cfg: Config, path: Path, day: str, rows: list, n_cands: int,
+                  rejected: list[dict] | None = None, chosen: list[dict] | None = None) -> None:
+    from autoclip import quality
+
+    def cell(x: str) -> str:
+        return x.replace("|", "/").replace("\n", " ")
+
+    def score_of(c: dict) -> str:
+        return f"{c['qualite']['total']}/100" if c.get("qualite") else f"chat {c['score']:.1f}"
+
     lines = [f"# Clips du {day}", "",
              f"{n_cands} candidate(s) repérée(s), {len(rows)} retenue(s) (max "
              f"{cfg.daily.max_clips_per_day}, au moins {cfg.daily.min_gap_minutes:g} min entre deux "
-             f"clips d'une même chaîne).", ""]
+             f"clips d'une même chaîne). Score de qualité sur 100 : somme pondérée des signaux "
+             f"(`[quality]` dans config.toml), moins les pénalités.", ""]
     if rows:
-        lines += ["| Rang | Chaîne | Heure | Score | Durée | Accroche | Pourquoi | Dossier |",
-                  "|---|---|---|---|---|---|---|---|"]
+        lines += ["| Rang | Chaîne | Heure | Score | Durée | Accroche | Pourquoi | Détail du score | Dossier |",
+                  "|---|---|---|---|---|---|---|---|---|"]
         for rank, c, hook in rows:
             folder = Path(c["output"]).name if c.get("output") else "rendu raté"
+            detail = quality.summary(c["qualite"]) if c.get("qualite") else "inconnu"
             cells = [str(rank), c["channel"], f"{datetime.fromtimestamp(c['t_peak_abs']):%H:%M}",
-                     f"{c['score']:.1f}", f"{c['duration']:.0f} s", hook, c["reason"], folder]
-            lines.append("| " + " | ".join(x.replace("|", "/") for x in cells) + " |")
+                     score_of(c), f"{c['duration']:.0f} s", hook or "inconnu", c["reason"], detail, folder]
+            lines.append("| " + " | ".join(cell(x) for x in cells) + " |")
+    best_rejected = sorted(rejected or [], key=rank_key, reverse=True)[:10]
+    if best_rejected:
+        lines += ["", "## Non retenues (les 10 meilleures)", "",
+                  "| Chaîne | Heure | Score | Pourquoi pas | Détail du score |", "|---|---|---|---|---|"]
+        for c in best_rejected:
+            detail = quality.summary(c["qualite"]) if c.get("qualite") else "inconnu"
+            cells = [c["channel"], f"{datetime.fromtimestamp(c['t_peak_abs']):%H:%M}", score_of(c),
+                     _why_not(cfg, c, chosen or []), detail]
+            lines.append("| " + " | ".join(cell(x) for x in cells) + " |")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

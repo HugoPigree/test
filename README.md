@@ -68,6 +68,38 @@ chat IRC   ──► recordings/<session>/chat.jsonl ┴─► pics de chat ─�
 - **Pubs Twitch** : sans compte sub/Turbo, Streamlink saute les pubs, ce qui laisse des trous dans la vidéo. Renseigne `twitch.oauth_token` (cookie `auth-token` de twitch.tv) pour les éviter.
 - **Disque** : compte environ 2,5 à 3,5 Go par heure en 1080p60. En mode `live`, le buffer reste autour de 2 à 3 Go (`[live] buffer_minutes`, `segment_seconds`, et `cooldown` entre deux clips). `export.delete_raw = true` supprime l'enregistrement brut une fois tous les clips générés.
 
+## Score de qualité des candidates (mode continu)
+
+Chaque candidate reçoit un score sur 100, recalculé au tri quotidien, avec le détail par signal
+dans `meta.json` (`qualite`, `mesures`) et dans `classement.md` (colonne « Détail du score » et
+section « Non retenues » qui dit pourquoi). Poids et seuils : section `[quality]`.
+
+| Signal | Mesure | Points pleins à |
+|---|---|---|
+| chat (25) | force du pic de chat | score 15 |
+| viewers (15) | viewers distincts qui écrivent à ±15 s du pic | 250 |
+| voix (20) | pic de volume de la voix (300-3400 Hz, ffmpeg) dans les 15 s avant le pic, contre la médiane du clip | +12 dB |
+| parole (20) | mots par seconde (Whisper) | 2,5 |
+| phrase (20) | le clip commence dans un silence ou après une fin de phrase, sans couper de mot (Whisper) | oui |
+
+Pénalités : durée hors 15-60 s (−20), plus de la moitié du clip sans voix (−15), pic dans les
+5 min après le début du live ou une coupure (−15), moins de 5 mots dans le clip (−25), meilleure
+candidate de la même chaîne à moins de `min_gap_minutes` (−10). Les mesures (ffmpeg + Whisper)
+sont faites au fil de l'eau, une candidate à la fois, en priorité basse.
+
+Plus tard, une IA : `[quality] external = "module:fonction"` (reçoit la candidate et ses mesures,
+renvoie `None` ou `{"points": 0..1, "detail": "..."}`), comptée avec `weight_external`. Rien
+d'externe n'est appelé par défaut.
+
+## Radar GTA 6
+
+`autoclip top --radar` écrit `ready_to_post/AAAA-MM-JJ/radar.md`, sans rien télécharger ni reposter :
+
+- **Twitch** : clips des dernières 24 h de la catégorie `Grand Theft Auto VI`, toutes langues, top 20 par vues (identifiants de `[top]`).
+- **YouTube** (Data API v3) : recherche « GTA 6 », vidéos courtes (< 4 min) publiées dans les 24 h, top 20 par vues. Il faut une clé (`[radar] youtube_api_key`, ou `YOUTUBE_API_KEY`) : console Google Cloud, activer « YouTube Data API v3 », créer une clé API. Une recherche coûte 100 unités sur 10 000 gratuites par jour ; `youtube_max_searches_per_day` (20) l'arrête avant (compteur dans `radar_quota.json`).
+- **Reddit** : top du jour de r/GTA6. Reddit refuse les scripts sans application : crée une appli « script » sur https://www.reddit.com/prefs/apps et mets `reddit_client_id` / `reddit_client_secret` dans `[radar]`.
+- **Top 10 global**, toutes sources mélangées, par score de tendance (vues ou votes / heures depuis la publication). Les doublons (même moment de la même VOD Twitch à moins de 60 s, post qui renvoie vers une autre entrée, titres presque identiques) sont regroupés avec le nombre de reprises. Une ligne factuelle par entrée (accroche = titre, scène, durée) ; ce qu'on ne sait pas s'écrit « inconnu » (la scène l'est toujours : la vidéo n'est pas regardée).
+
 ## Top des clips Twitch du jour
 
 `autoclip top --lang fr --count 3` prépare le top 3 des clips Twitch français des dernières 24 h :

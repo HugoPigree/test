@@ -98,6 +98,11 @@ def cmd_process(cfg: Config, args) -> int:
 def cmd_top(cfg: Config, args) -> int:
     from autoclip.top import run_top
 
+    if args.radar:
+        from autoclip.radar import run_radar
+
+        print(run_radar(cfg))
+        return 0
     clips = run_top(cfg, args.lang or cfg.top.lang, args.count or cfg.top.count)
     for c in clips:
         print(c)
@@ -205,6 +210,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("top", help="top des clips Twitch du jour (API Twitch), prêts à poster")
     p.add_argument("--lang", help="langue des clips (défaut : [top] lang, fr)")
     p.add_argument("--count", type=int, help="nombre de clips (défaut : [top] count, 3)")
+    p.add_argument("--radar", action="store_true",
+                   help="radar GTA 6 (Twitch, YouTube, Reddit) dans radar.md, sans rien télécharger")
     p.set_defaults(func=cmd_top)
 
     p = sub.add_parser("detect", help="affiche les pics détectés (réglage des seuils)")

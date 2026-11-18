@@ -113,8 +113,10 @@ def test_cleanup_retention_disk_limit_and_leftovers(tmp_path):
 def test_daily_selection_renders_only_the_best_and_ranks_them(tmp_path, monkeypatch):
     if not shutil.which("ffmpeg"):
         pytest.skip("ffmpeg requis")
-    monkeypatch.setattr(subtitles, "transcribe",
-                        lambda wav, cfg, title="": [subtitles.Word(0.5, 1.0, "Wesh"), subtitles.Word(1.0, 1.5, "frérot")])
+    # Whisper (simulé) : 8 mots juste après le début du clip (l'audio transcrit commence 2 s avant).
+    words = [subtitles.Word(2.3 + i * 0.4, 2.6 + i * 0.4, w) for i, w in
+             enumerate(["Wesh", "frérot", "regarde", "ça", "il", "a", "pas", "fait."])]
+    monkeypatch.setattr(subtitles, "transcribe", lambda wav, cfg, title="": words)
     cfg = cfg_in(tmp_path)
     cfg.daily.max_clips_per_day = 2
     d = daily.candidates_dir(cfg)
@@ -141,11 +143,27 @@ def test_daily_selection_renders_only_the_best_and_ranks_them(tmp_path, monkeypa
     ranking = (out / "classement.md").read_text(encoding="utf-8")
     assert "4 candidate(s) repérée(s), 2 retenue(s)" in ranking
     lines = [l for l in ranking.splitlines() if l.startswith("| 1 ") or l.startswith("| 2 ")]
-    assert "| 9.1 |" in lines[0] and "26 s" in lines[0] and "Le chat s'emballe" in lines[0]
+    assert "/100 |" in lines[0] and "26 s" in lines[0] and "Le chat s'emballe" in lines[0]
+    assert "chat " in lines[0] and "parole " in lines[0]  # détail du score
+    # Les non retenues sont expliquées (c0 : 5 min avant le n°1 sur la même chaîne).
+    assert "## Non retenues" in ranking and "à 5 min d'un clip retenu mieux classé (15:05)" in ranking
+    meta = json.loads((out / clips[0] / "meta.json").read_text(encoding="utf-8"))
+    assert meta["rang"] == 1 and 0 <= meta["qualite"]["total"] <= 100
+    assert "voix_db" in meta["mesures"] and meta["mesures"]["mots"] == 8
+    assert meta["mesures"]["debut_phrase"] is True and "pause" not in meta["qualite"]["penalites"]
     status = {c["name"]: c["status"] for c in daily.load_candidates(cfg)}
     assert status == {"c0": "rejected", "c1": "selected", "c2": "selected", "c3": "rejected"}
     assert not (d / "c1.ts").exists() and (d / "c0.ts").exists()  # brut des retenues supprimé
     assert not daily.selection_due(cfg, now)  # pas deux tris le même jour
+
+
+def test_ties_at_zero_are_broken_by_the_score_before_penalties(tmp_path):
+    cfg = cfg_in(tmp_path)
+    a = candidate(cfg, "a", "jltomy", 1000.0, 3.0)
+    b = candidate(cfg, "b", "jltomy", 9000.0, 3.0)
+    a["qualite"] = {"total": 0, "base": 12.0}
+    b["qualite"] = {"total": 0, "base": 20.0}
+    assert [c["name"] for c in daily.pick([a, b], 1, 60)] == ["b"]
 
 
 def test_reason_is_one_readable_line():

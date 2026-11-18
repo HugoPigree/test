@@ -102,6 +102,8 @@ brouillons depuis son téléphone.
 | `autoclip/live.py` | Mode continu : un thread `_watch` par chaîne (`streamlink --stdout` → `ffmpeg -f segment` en MPEG-TS, purge du buffer, détection toutes les 5 s, découpe depuis les segments → candidate). Boucle principale de `run_live` : tri quotidien (thread `_selection`, priorité basse), nettoyage toutes les 10 min, heartbeat chaque minute ; si une chaîne plante, code 1 et le superviseur relance. |
 | `autoclip/daily.py` | Candidates (`trim_copy` : coupe `-c copy -copyts`, vrai début calculé par `start_time`), doublons lus sur le disque (`live.cooldown`), tri (`pick`, `run_selection`, `classement.md`), `cleanup` (rétention, limite disque, restes d'arrêt brutal), `write_heartbeat`. État du tri dans `candidates/_etat.json`. |
 | `scripts/run_autoclip.ps1` | Superviseur : relance `autoclip live` avec 30 s, 1, 2, 4… 15 min ; remis à 30 s après 1 h de marche. |
+| `autoclip/quality.py` | Score de qualité 0-100 des candidates (demandé le 19/11/2026) : `measure` (ffmpeg ebur128 bande voix ; Whisper sur le clip + 5 s avant pour savoir si le début coupe une phrase), `score` (signaux pondérés `[quality]` ramenés sur 100, moins pénalités), `summary` (une ligne pour classement.md). Point d'entrée IA : `[quality] external = "module:fonction"` (vide par défaut, pas d'IA externe pour l'instant). Les mesures sont faites par le fil `live._measurer` (une à la fois, verrou `live.WHISPER` partagé avec le tri). À égalité de score (ex. deux 0), le score avant pénalités départage. |
+| `autoclip/radar.py` | `autoclip top --radar` (demandé le 19/11/2026) : radar GTA 6 Twitch (catégorie GTA VI) + YouTube Data API (clé, compteur `radar_quota.json`) + Reddit (OAuth si appli, sinon .json public, refusé en 403) → `ready_to_post/AAAA-MM-JJ/radar.md`, top 10 global par vues (ou votes)/heure, doublons regroupés, ligne factuelle « inconnu » si l'info manque. Ne télécharge rien. |
 | `autoclip/top.py` | `autoclip top --lang fr --count 3` (demandé le 18/11/2026) : API Helix (jeton d'appli, Get Top Games pour les `top_games` = 100 catégories les plus regardées du moment, 1 page chacune, + Get Games pour `[top] categories`, 5 pages chacune ; puis Get Clips 24 h par catégorie), filtre langue, doublons (id, ou même VOD à < 60 s), tri par vues ; yt-dlp ; `process_peak` sur le clip entier (60 s max, accroche 3 s, pas de zoom ni de chat) ; `ready_to_post/top_AAAA-MM-JJ_NN/` avec crédit streamer + clippeur + lien dans `caption.txt`, vues / lien / chaîne dans `meta.json`. Jamais d'upload TikTok. Identifiants : `[top] client_id / client_secret` ou `TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET`. |
 | `autoclip/tiktok.py` | OAuth + Content Posting API (`inbox` / `direct`). **Jamais testé en vrai.** |
 | `scripts/setup_server.sh` | Installation idempotente, sans sudo (venv, dépendances, modèle Whisper, config, check). |
@@ -201,6 +203,16 @@ faster-whisper 1.2.1), **18/11/2026** :
     tri avec 5 clips et deux chaînes, **tâche planifiée au démarrage** (demande un PowerShell
     admin, pas encore lancée). Estimation : à ce rythme ~13 Go de candidates par jour, donc la
     limite de 20 Go jouera avant les 48 h (les non retenues partent en premier).
+- **Score de qualité, 19/11/2026, sur une copie des 16 vraies candidates JLTomy** (22:34 → 00:00) :
+  mesures ffmpeg + Whisper en ~66 s par candidate (1 060 s pour 16), tri + rendu de 3 clips en
+  265 s. Scores de 40 à 83/100 ; classement.md lisible (détail par signal, raison des non
+  retenues). Constats : 12 sur 16 « coupent une phrase » (le début est fixé par pre_roll) ; avec
+  `viewers_full = 60` le signal viewers était plein partout (38 à 355 viewers distincts chez
+  JLTomy) : passé à 250. Pas encore vu tourner dans le vrai `autoclip live` au moment de l'écrire.
+- **Radar GTA 6, 19/11/2026 00:00, vrai Twitch** : catégorie trouvée, 20 clips (toutes langues),
+  2 groupes de doublons justes (même VOD, 5 s et 25 s d'écart). YouTube : pas de clé, jamais
+  appelé pour de vrai (tests simulés). Reddit : l'adresse .json publique répond 403 ; OAuth codé
+  mais pas testé (pas d'appli Reddit).
 - `autoclip top` : étapes 2 à 4 testées sur un vrai clip Etostark (« pauvre Fousseyd », 17 s,
   URL `clips.twitch.tv/…`) : yt-dlp OK, clip entier en 1080x1920, titre de Claude 3 s, légende
   avec crédit + lien, 33 s de traitement.
