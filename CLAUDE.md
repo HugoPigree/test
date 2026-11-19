@@ -74,7 +74,8 @@ brouillons depuis son téléphone.
   sans réencodage dans `candidates/`, `.ts` + `.json`) ; le rendu complet n'est fait qu'au tri
   quotidien (`[daily]` : `max_clips_per_day` 5, `min_gap_minutes` 20 par chaîne, `selection_time`
   23:00, `retention_hours` 48, `max_disk_gb` 20) dans `ready_to_post/AAAA-MM-JJ/` + `classement.md`.
-  Quota global (toutes chaînes). Superviseur PowerShell (`scripts/run_autoclip.ps1`, délai
+  Quota global (toutes chaînes). **Le 19/11/2026 à 01 h, l'utilisateur veut les clips à son réveil
+  (10 h) : `selection_time = "08:00"` dans le config.toml du serveur** (l'exemple garde 23:00). Superviseur PowerShell (`scripts/run_autoclip.ps1`, délai
   croissant) lancé par la tâche planifiée ; `heartbeat.json` chaque minute ; `autoclip.log`
   tournant (5 Mo × 5). Ne rien ajouter d'autre à ce mode sans demande.
 - Les clips arrivent en brouillons TikTok, postés à la main depuis le téléphone. Au début, 1 à 2
