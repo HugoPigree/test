@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autoclip</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;600&display=swap">
+<style>
+  /* Layout: one readable column, two sections (terms, privacy) with a small table of contents */
+  :root {
+    --bg: #fbfaf7; --fg: #1d1b24; --muted: #5d5868; --line: #e4e0d8; --accent: #e0285a; --panel: #ffffff;
+    --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+    --body: "Inter", "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #16151b; --fg: #ece9f2; --muted: #a7a2b3; --line: #2e2b36; --accent: #ff5c86; --panel: #1e1c24; color-scheme: dark } }
+  :root[data-theme="dark"] { --bg: #16151b; --fg: #ece9f2; --muted: #a7a2b3; --line: #2e2b36; --accent: #ff5c86; --panel: #1e1c24; color-scheme: dark }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.65 var(--body); }
+  .wrap { max-width: 720px; margin: 0 auto; padding-block: 40px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; line-height: 1.2; }
+  h1 { font-size: 34px; margin: 0 0 6px; }
+  h2 { font-size: 24px; margin: 48px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 24px 0 4px; }
+  p, li { max-width: 65ch; }
+  .meta { color: var(--muted); font-size: 13px; margin: 0; }
+  .toc { display: flex; gap: 10px; flex-wrap: wrap; margin: 20px 0 0; padding: 0; list-style: none; }
+  .toc a { display: inline-block; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; color: var(--fg); text-decoration: none; background: var(--panel); font-size: 14px; }
+  .toc a:hover, .toc a:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+  .note { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--accent); padding: 12px 16px; border-radius: 6px; margin: 20px 0 0; }
+  ul { padding-left: 20px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Autoclip</h1>
+  <p class="meta">Last updated 20 November 2026</p>
+  <ul class="toc"><li><a href="./">Home</a></li><li><a href="terms.html">Terms of Service</a></li><li><a href="privacy.html">Privacy Policy</a></li></ul>
+  <p class="note">Autoclip is a personal tool run by one creator. It turns moments from public Twitch live streams into short vertical videos and publishes them to that creator's own TikTok account. It has no other users and no sign-up.</p>
+  <h2>How it works</h2>
+  <ol>
+    <li>Autoclip follows a few public Twitch live streams and reads their public chat.</li>
+    <li>When the chat reacts strongly, it cuts a 15 to 60 second moment and scores it.</li>
+    <li>The best moments become vertical videos with subtitles, a title and a caption that credits the streamer.</li>
+    <li>Clips that pass a content check are published to the owner's TikTok account with the TikTok Content Posting API, at most five a day.</li>
+  </ol>
+  <p>Source code: <a href="https://github.com/HugoPigree/test">github.com/HugoPigree/test</a></p>
+
+</div>
+</body>
+</html>
